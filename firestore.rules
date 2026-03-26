@@ -8,10 +8,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isHardcodedAdmin() {
+      return request.auth.token.email in [
+        "predenatjeanphenix@gmail.com",
+        "stepheclerveaux@gmail.com",
+        "chretiensmaptoujouretenegbibla@gmail.com"
+      ] && request.auth.token.email_verified == true;
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        (request.auth.token.email == "predenatjeanphenix@gmail.com" && request.auth.token.email_verified == true)
+        isHardcodedAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -46,9 +55,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       // Allow users to create their own profile if it doesn't exist, but only with 'user' role
-      // Unless they are the hardcoded admin
+      // Unless they are a hardcoded admin
       allow create: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) &&
-                      (request.resource.data.role == 'user' || request.auth.token.email == "predenatjeanphenix@gmail.com");
+                      (request.resource.data.role == 'user' || isHardcodedAdmin());
       // Only admins can update roles
       allow update: if isAdmin() && isValidUser(request.resource.data);
     }

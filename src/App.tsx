@@ -67,10 +67,15 @@ export default function App() {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
         const userSnap = await getDoc(userRef);
-        let role: 'admin' | 'user' = 'user';
+        const adminEmails = [
+          "predenatjeanphenix@gmail.com",
+          "stepheclerveaux@gmail.com",
+          "chretiensmaptoujouretenegbibla@gmail.com"
+        ];
+        const isHardcoded = adminEmails.includes(currentUser.email || '');
+        let role: 'admin' | 'user' = isHardcoded ? 'admin' : 'user';
 
         if (!userSnap.exists()) {
-          role = currentUser.email === "predenatjeanphenix@gmail.com" ? 'admin' : 'user';
           await setDoc(userRef, {
             email: currentUser.email,
             displayName: currentUser.displayName,
@@ -79,7 +84,17 @@ export default function App() {
             createdAt: new Date().toISOString()
           });
         } else {
-          role = userSnap.data().role || 'user';
+          const existingData = userSnap.data();
+          // If they are hardcoded but database says 'user', update it
+          if (isHardcoded && existingData.role !== 'admin') {
+            try {
+              await updateDoc(userRef, { role: 'admin' });
+            } catch (err) {
+              console.error("Failed to update role to admin:", err);
+            }
+          } else {
+            role = existingData.role || 'user';
+          }
         }
         setUserRole(role);
         return role;
@@ -219,6 +234,11 @@ export default function App() {
               {syncError && (
                 <div className="mb-3 px-3 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[9px] text-red-500 uppercase tracking-widest font-bold">
                   {syncError}
+                </div>
+              )}
+              {authError && (
+                <div className="mb-3 px-3 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[9px] text-red-500 uppercase tracking-widest font-bold">
+                  {authError}
                 </div>
               )}
               <div className="w-10 h-10 md:w-16 md:h-16 rounded-lg md:rounded-2xl electric-gradient flex items-center justify-center mb-3 md:mb-6 shadow-2xl shadow-electric-cyan/20">

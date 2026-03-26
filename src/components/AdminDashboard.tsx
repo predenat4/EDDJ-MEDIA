@@ -22,6 +22,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', category: '' });
   const [users, setUsers] = useState<any[]>([]);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
   const [isReadingFile, setIsReadingFile] = useState(false);
@@ -45,8 +46,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         ...doc.data()
       }));
       setUsers(userList);
+      setUsersError(null);
     }, (error) => {
       console.error("Firestore Error (USERS): ", error);
+      setUsersError("Erreur de connexion avec la base de données (Utilisateurs). Vérifiez vos droits d'accès.");
     });
     return () => unsubscribe();
   }, []);
@@ -230,6 +233,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
           )}
         </button>
       </div>
+
+      {usersError && activeTab === 'users' && (
+        <div className="mx-6 mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-500">
+          <AlertTriangle size={20} />
+          <p className="text-xs font-bold uppercase tracking-widest">{usersError}</p>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-6">
         <AnimatePresence mode="wait">
