@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Key, X, LayoutDashboard, LogOut, Home } from 'lucide-react';
+import { Key, X, LayoutDashboard, LogOut, Home, Eye, EyeOff } from 'lucide-react';
 
 interface NavbarProps {
   onAuthSuccess: (token: string) => void;
@@ -14,6 +14,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [keyInput, setKeyInput] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -140,28 +141,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
               <p className="text-white/60 text-sm mb-6">Veuillez saisir votre clé d'accès unique.</p>
 
               <form onSubmit={handleLogin} className="space-y-4">
-                <div>
+                <div className="relative">
                   <input
-                    type="password"
+                    type={showKey ? "text" : "password"}
                     value={keyInput}
                     onChange={(e) => setKeyInput(e.target.value)}
-                    placeholder="Clé d'accès (6-8 caractères)"
+                    placeholder="Clé d'accès"
                     className={`w-full bg-white/5 border ${
                       error ? 'border-red-500' : 'border-white/10'
-                    } rounded-lg px-4 py-3 focus:outline-none focus:border-electric-cyan transition-colors text-center tracking-[0.5em] font-mono`}
+                    } rounded-lg px-4 py-3 focus:outline-none focus:border-electric-cyan transition-colors text-center tracking-[0.2em] font-mono pr-12`}
                     maxLength={8}
                     autoFocus
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                  >
+                    {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                   {error && <p className="text-red-500 text-xs mt-2 text-center">Clé invalide. Accès refusé.</p>}
-                </div>
-
-                <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
-                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2 text-center">Clés de test (Admin)</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {['EDJJ01', 'MEDIAX', 'ADMIN9', 'KEY777'].map(k => (
-                      <code key={k} className="text-[10px] bg-electric-cyan/10 text-electric-cyan px-2 py-1 rounded">{k}</code>
-                    ))}
-                  </div>
                 </div>
 
                 <motion.button
