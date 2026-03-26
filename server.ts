@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
 
@@ -98,9 +98,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
+
+  return app;
 }
 
-startServer();
+const appPromise = startServer();
+export default async (req: any, res: any) => {
+  const app = await appPromise;
+  return app(req, res);
+};
