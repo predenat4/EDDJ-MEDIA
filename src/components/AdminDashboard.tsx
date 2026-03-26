@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check } from 'lucide-react';
+import { ChristianCross } from './Icons';
 import { MediaItem, MediaType } from '../types';
 
 interface AdminDashboardProps {
@@ -74,12 +75,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     >
       {/* Header */}
       <div className="p-8 border-b border-white/10 flex justify-between items-center bg-black/20">
-        <div>
-          <h2 className="text-3xl font-bold flex items-center gap-3">
-            <Settings className="text-electric-cyan" size={32} />
-            Administration
-          </h2>
-          <p className="text-xs text-white/40 uppercase tracking-widest mt-2">Gestion du contenu EDJJ Media • Espace Sécurisé</p>
+        <div className="flex items-center gap-6">
+          <div className="w-12 h-12 rounded-xl electric-gradient flex items-center justify-center shadow-lg shadow-electric-cyan/20">
+            <ChristianCross size={24} className="text-black" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold flex items-center gap-3">
+              Administration
+            </h2>
+            <p className="text-xs text-white/40 uppercase tracking-widest mt-2">Gestion du contenu EDJJ Media • Espace Sécurisé</p>
+          </div>
         </div>
         <button 
           onClick={onClose} 

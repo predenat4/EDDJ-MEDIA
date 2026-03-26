@@ -5,6 +5,7 @@ import { MediaCard } from './components/MediaCard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MediaItem, AuthState, MediaType } from './types';
 import { X, Play, Download, Image as ImageIcon, Music } from 'lucide-react';
+import { ChristianCross } from './components/Icons';
 
 import { VideoPlayer } from './components/VideoPlayer';
 
@@ -93,11 +94,17 @@ export default function App() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-12"
+              className="text-center mb-12 flex flex-col items-center"
             >
+              <div className="w-16 h-16 rounded-2xl electric-gradient flex items-center justify-center mb-6 shadow-2xl shadow-electric-cyan/20">
+                <ChristianCross size={32} className="text-black" />
+              </div>
               <h1 className="text-3xl md:text-5xl font-bold tracking-tighter mb-4">
                 TÉLÉCHARGER LES MÉDIAS DE NOTRE <span className="electric-text italic">ÉGLISE EN LIGNE</span>
               </h1>
+              <p className="text-white/40 text-sm md:text-base max-w-2xl mx-auto uppercase tracking-[0.2em] font-medium">
+                Plateforme de contenu multimédia haut de gamme avec administration sécurisée.
+              </p>
             </motion.div>
 
             {/* Filter Bar */}
@@ -234,8 +241,14 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <footer className="py-10 border-t border-white/5 text-center text-white/20 text-xs tracking-widest uppercase">
-        © 2026 EDJJ MEDIA • TOUS DROITS RÉSERVÉS
+      <footer className="py-16 border-t border-white/5 flex flex-col items-center gap-6">
+        <div className="flex items-center gap-2 text-sm font-bold tracking-tighter opacity-40">
+          <ChristianCross size={14} className="text-electric-cyan" />
+          <span>EDJJ<span className="electric-text">MEDIA</span></span>
+        </div>
+        <p className="text-white/20 text-[10px] tracking-[0.3em] uppercase">
+          © 2026 EDJJ MEDIA • TOUS DROITS RÉSERVÉS
+        </p>
       </footer>
     </div>
   );

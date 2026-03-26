@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Key, X, LayoutDashboard, LogOut, Home, Eye, EyeOff } from 'lucide-react';
+import { ChristianCross } from './Icons';
 
 interface NavbarProps {
   onAuthSuccess: (token: string) => void;
@@ -66,9 +67,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={() => showAdmin ? onToggleAdmin() : null}
-            className={`text-2xl font-bold tracking-tighter ${showAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+            className={`flex items-center gap-2 text-2xl font-bold tracking-tighter ${showAdmin ? 'cursor-pointer' : 'cursor-default'}`}
           >
-            EDJJ<span className="electric-text">MEDIA</span>
+            <div className="p-1.5 rounded-lg electric-gradient">
+              <ChristianCross size={20} className="text-black" />
+            </div>
+            <span>EDJJ<span className="electric-text">MEDIA</span></span>
           </motion.button>
 
           <div className="flex items-center gap-4">
