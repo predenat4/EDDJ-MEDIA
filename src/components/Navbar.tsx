@@ -15,7 +15,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, onLogout, showAdmin, onToggleAdmin }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -28,15 +28,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
 
   const handleLogin = async () => {
     setIsLoading(true);
-    setError(false);
+    setError(null);
 
     try {
       await signInWithPopup(auth, googleProvider);
       onAuthSuccess();
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Login error", err);
-      setError(true);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError("Ce domaine n'est pas autorisé dans la console Firebase.");
+      } else if (err.code === 'auth/popup-blocked') {
+        setError("Le pop-up a été bloqué par votre navigateur.");
+      } else {
+        setError("Erreur de connexion : " + (err.message || "Inconnue"));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +147,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                 <p className="text-white/60 text-sm mb-6">Connectez-vous avec votre compte Google autorisé.</p>
 
                 <div className="space-y-4">
-                  {error && <p className="text-red-500 text-xs mt-2 text-center">Accès refusé ou erreur de connexion.</p>}
+                  {error && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4">
+                      <p className="text-red-500 text-xs text-center font-medium">{error}</p>
+                    </div>
+                  )}
                   
                   <motion.button
                     whileHover={{ scale: 1.02 }}
