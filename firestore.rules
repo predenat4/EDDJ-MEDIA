@@ -25,6 +25,13 @@ service cloud.firestore {
              data.authorUid == request.auth.uid;
     }
 
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt']) &&
+             data.email is string && data.email.size() > 0 &&
+             data.role in ['admin', 'user'] &&
+             data.createdAt is string;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -38,7 +45,12 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin();
+      // Allow users to create their own profile if it doesn't exist, but only with 'user' role
+      // Unless they are the hardcoded admin
+      allow create: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) &&
+                      (request.resource.data.role == 'user' || request.auth.token.email == "predenatjeanphenix@gmail.com");
+      // Only admins can update roles
+      allow update: if isAdmin() && isValidUser(request.resource.data);
     }
   }
 }

@@ -7,6 +7,8 @@ export interface MediaItem {
   url: string;
   thumbnail: string;
   category: string;
+  createdAt?: string;
+  authorUid?: string;
 }
 
 export interface AuthState {

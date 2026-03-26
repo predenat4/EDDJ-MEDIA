@@ -1,28 +1,31 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check } from 'lucide-react';
+import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check, Users as UsersIcon, ShieldCheck } from 'lucide-react';
 import { ChristianCross } from './Icons';
 import { MediaItem, MediaType } from '../types';
-import { db, collection, addDoc, updateDoc, deleteDoc, doc } from '../firebase';
+import { db, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from '../firebase';
 
 interface AdminDashboardProps {
   onClose: () => void;
   mediaItems: MediaItem[];
-  onAdd: (item: Omit<MediaItem, 'id'>) => void;
+  onAdd: (item: Omit<MediaItem, 'id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<MediaItem>) => void;
   onDelete: (id: string) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaItems, onAdd, onUpdate, onDelete }) => {
-  const [activeTab, setActiveTab] = useState<'add' | 'manage'>('manage');
+  const [activeTab, setActiveTab] = useState<'add' | 'manage' | 'users'>('manage');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', category: '' });
+  const [users, setUsers] = useState<any[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   
   const [isReadingFile, setIsReadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [newMedia, setNewMedia] = useState({
     title: '',
     type: 'photo' as MediaType,
@@ -33,6 +36,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    // Listen for users
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const userList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setUsers(userList);
+    }, (error) => {
+      console.error("Firestore Error (USERS): ", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleFileButtonClick = () => {
     fileInputRef.current?.click();
   };
@@ -40,6 +58,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setUploadError(null);
+      // Check file size (Firestore document limit is 1MB, but we should be safer)
+      if (file.size > 800000) {
+        setUploadError("Le fichier est trop volumineux (max 800KB pour Firestore). Veuillez utiliser un fichier plus petit.");
+        return;
+      }
+
       setIsReadingFile(true);
       let type: MediaType = 'photo';
       if (file.type.startsWith('video/')) type = 'video';
@@ -58,6 +83,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         setIsReadingFile(false);
       };
       
+      reader.onerror = () => {
+        setUploadError("Erreur lors de la lecture du fichier.");
+        setIsReadingFile(false);
+      };
+
       if (type === 'photo' || type === 'audio') {
         reader.readAsDataURL(file);
       } else {
@@ -88,20 +118,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     }
   };
 
+  const handleRoleUpdate = async (userId: string, newRole: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+    } catch (error) {
+      console.error("Firestore Error (ROLE UPDATE): ", error);
+    }
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newMedia.url) {
+      setUploadError("Veuillez sélectionner un fichier.");
+      return;
+    }
+
     setIsUploading(true);
+    setUploadError(null);
     
     try {
       // Simulate upload progress for UI feel
-      for (let i = 0; i <= 100; i += 20) {
+      for (let i = 0; i <= 100; i += 10) {
         setUploadProgress(i);
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 50));
       }
 
-      onAdd({
+      await onAdd({
         ...newMedia,
-        url: newMedia.url || `https://picsum.photos/seed/${Date.now()}/800/600`,
+        url: newMedia.url,
         thumbnail: newMedia.thumbnail || (newMedia.type === 'photo' ? newMedia.url : `https://picsum.photos/seed/${Date.now()}/400/300`)
       });
 
@@ -109,8 +153,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       setUploadProgress(0);
       setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '' });
       setActiveTab('manage');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error", error);
+      setUploadError("Erreur lors de la publication : " + (error.message || "Inconnue"));
       setIsUploading(false);
     }
   };
@@ -170,6 +215,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         >
           Ajouter du contenu
           {activeTab === 'add' && (
+            <motion.div layoutId="admin-tab" className="absolute bottom-0 left-0 right-0 h-0.5 electric-gradient" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`px-6 py-4 text-sm font-bold transition-all relative ${
+            activeTab === 'users' ? 'text-electric-cyan' : 'text-white/40 hover:text-white'
+          }`}
+        >
+          Gérer les accès
+          {activeTab === 'users' && (
             <motion.div layoutId="admin-tab" className="absolute bottom-0 left-0 right-0 h-0.5 electric-gradient" />
           )}
         </button>
@@ -240,16 +296,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                     <button
                       type="button"
                       onClick={handleFileButtonClick}
-                      className="w-full border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 hover:border-electric-cyan/30 transition-all cursor-pointer group bg-white/5"
+                      className={`w-full border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-4 transition-all cursor-pointer group bg-white/5 ${
+                        uploadError ? 'border-red-500/50 hover:border-red-500' : 'border-white/10 hover:border-electric-cyan/30'
+                      }`}
                     >
-                      <div className="p-4 rounded-full bg-white/5 group-hover:bg-electric-cyan/10 transition-colors">
-                        <Upload size={32} className="text-white/20 group-hover:text-electric-cyan transition-colors" />
+                      <div className={`p-4 rounded-full bg-white/5 transition-colors ${uploadError ? 'group-hover:bg-red-500/10' : 'group-hover:bg-electric-cyan/10'}`}>
+                        <Upload size={32} className={`transition-colors ${uploadError ? 'text-red-500/50 group-hover:text-red-500' : 'text-white/20 group-hover:text-electric-cyan'}`} />
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-bold uppercase tracking-widest">Cliquez pour UPLOADER</p>
                         <p className="text-[10px] text-white/40 mt-1 uppercase tracking-tighter">Sélectionnez un média depuis votre appareil</p>
                       </div>
                     </button>
+                    {uploadError && (
+                      <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest text-center">{uploadError}</p>
+                    )}
                   </div>
 
                   {isUploading && (
@@ -294,6 +355,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                     )}
                   </button>
                 </form>
+              </div>
+            </motion.div>
+          ) : activeTab === 'users' ? (
+            <motion.div
+              key="users"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                <input
+                  type="text"
+                  value={userSearchQuery}
+                  onChange={e => setUserSearchQuery(e.target.value)}
+                  placeholder="Rechercher un utilisateur par email..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 focus:border-electric-cyan outline-none transition-colors"
+                />
+              </div>
+
+              <div className="space-y-3">
+                {users.filter(u => u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())).map(u => (
+                  <div key={u.id} className="glass p-4 rounded-xl flex items-center justify-between border-white/5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-white/5 overflow-hidden border border-white/10">
+                        {u.photoURL ? (
+                          <img src={u.photoURL} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-white/20">
+                            <UsersIcon size={20} />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm">{u.displayName || 'Utilisateur sans nom'}</h4>
+                        <p className="text-[10px] text-white/40 uppercase tracking-widest">{u.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase tracking-widest font-bold border ${
+                          u.role === 'admin' ? 'bg-electric-cyan/10 text-electric-cyan border-electric-cyan/20' : 'bg-white/5 text-white/40 border-white/10'
+                        }`}>
+                          {u.role}
+                        </span>
+                        {u.email !== "predenatjeanphenix@gmail.com" && (
+                          <button
+                            onClick={() => handleRoleUpdate(u.id, u.role === 'admin' ? 'user' : 'admin')}
+                            className="p-2 text-white/20 hover:text-electric-cyan hover:bg-electric-cyan/10 rounded-lg transition-all"
+                            title={u.role === 'admin' ? "Retirer les droits admin" : "Donner les droits admin"}
+                          >
+                            {u.role === 'admin' ? <ShieldCheck size={18} className="text-electric-cyan" /> : <ShieldCheck size={18} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           ) : (

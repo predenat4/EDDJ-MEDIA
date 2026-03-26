@@ -18,6 +18,10 @@ import {
   doc,
   addDoc,
   updateDoc,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  setDoc,
+  getDoc,
   User 
 } from './firebase';
 
@@ -27,17 +31,77 @@ export default function App() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [filter, setFilter] = useState<'all' | MediaType>('all');
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Handle Email Link Sign-in
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = window.localStorage.getItem('emailForSignIn');
+      if (!email) {
+        email = window.prompt('Veuillez fournir votre email pour confirmation');
+      }
+      if (email) {
+        signInWithEmailLink(auth, email, window.location.href)
+          .then(async (result) => {
+            window.localStorage.removeItem('emailForSignIn');
+            setUser(result.user);
+            // Sync profile and get role
+            const role = await syncUserProfile(result.user);
+            if (role === 'admin') setShowAdmin(true);
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+          })
+          .catch((error) => {
+            console.error("Email link sign-in error", error);
+            setAuthError("Erreur lors de la connexion par lien email.");
+          });
+      }
+    }
+
+    const syncUserProfile = async (currentUser: User) => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        let role: 'admin' | 'user' = 'user';
+
+        if (!userSnap.exists()) {
+          role = currentUser.email === "predenatjeanphenix@gmail.com" ? 'admin' : 'user';
+          await setDoc(userRef, {
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+            role: role,
+            createdAt: new Date().toISOString()
+          });
+        } else {
+          role = userSnap.data().role || 'user';
+        }
+        setUserRole(role);
+        return role;
+      } catch (err) {
+        console.error("Error syncing user profile:", err);
+        return 'user';
+      }
+    };
+
     // Listen for auth state changes
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) setShowAdmin(false);
+      if (currentUser) {
+        await syncUserProfile(currentUser);
+      } else {
+        setUserRole(null);
+        setShowAdmin(false);
+      }
     });
 
     // Listen for real-time media updates
+    setIsSyncing(true);
     const q = query(collection(db, 'media'), orderBy('createdAt', 'desc'));
     const unsubscribeMedia = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({
@@ -45,8 +109,25 @@ export default function App() {
         ...doc.data()
       })) as MediaItem[];
       setMedia(items);
+      setIsSyncing(false);
+      setSyncError(null);
     }, (error) => {
       console.error("Firestore Error (LIST): ", error);
+      setSyncError("Erreur de synchronisation avec la base de données.");
+      setIsSyncing(false);
+      
+      // Fallback: try without orderBy in case of index issues or missing fields
+      if (error.code === 'failed-precondition' || error.message.includes('index')) {
+        const fallbackQ = query(collection(db, 'media'));
+        onSnapshot(fallbackQ, (fallbackSnapshot) => {
+          const items = fallbackSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as MediaItem[];
+          setMedia(items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+          setSyncError(null);
+        });
+      }
     });
 
     return () => {
@@ -97,18 +178,19 @@ export default function App() {
     <div className="min-h-screen bg-deep-black selection:bg-electric-cyan selection:text-black">
       <Navbar
         isAuthenticated={!!user}
+        userRole={userRole}
         showAdmin={showAdmin}
         onToggleAdmin={() => setShowAdmin(prev => !prev)}
         onAuthSuccess={() => {
-          setShowAdmin(true);
+          // Role will be set by syncUserProfile in the auth listener
         }}
         onLogout={() => {
           setShowAdmin(false);
         }}
       />
 
-      <main className="max-w-7xl mx-auto pt-24 pb-20 px-6">
-        {showAdmin && user ? (
+      <main className="max-w-7xl mx-auto pt-20 md:pt-24 pb-20 px-4 md:px-6">
+        {showAdmin && user && userRole === 'admin' ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -127,27 +209,38 @@ export default function App() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-12 flex flex-col items-center"
+              className="text-center mb-6 md:mb-12 flex flex-col items-center"
             >
-              <div className="w-16 h-16 rounded-2xl electric-gradient flex items-center justify-center mb-6 shadow-2xl shadow-electric-cyan/20">
-                <ChristianCross size={32} className="text-black" />
+              {isSyncing && (
+                <div className="mb-3 px-3 py-0.5 rounded-full bg-electric-cyan/10 border border-electric-cyan/20 text-[9px] text-electric-cyan animate-pulse uppercase tracking-widest font-bold">
+                  Synchronisation...
+                </div>
+              )}
+              {syncError && (
+                <div className="mb-3 px-3 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[9px] text-red-500 uppercase tracking-widest font-bold">
+                  {syncError}
+                </div>
+              )}
+              <div className="w-10 h-10 md:w-16 md:h-16 rounded-lg md:rounded-2xl electric-gradient flex items-center justify-center mb-3 md:mb-6 shadow-2xl shadow-electric-cyan/20">
+                <ChristianCross size={20} className="text-black md:hidden" />
+                <ChristianCross size={32} className="text-black hidden md:block" />
               </div>
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tighter mb-4">
-                TÉLÉCHARGER LES MÉDIAS DE NOTRE <span className="electric-text italic">ÉGLISE EN LIGNE</span>
+              <h1 className="text-xl md:text-5xl font-bold tracking-tighter mb-2 md:mb-4 px-2">
+                MÉDIAS DE NOTRE <span className="electric-text italic">ÉGLISE EN LIGNE</span>
               </h1>
-              <p className="text-white/40 text-sm md:text-base max-w-2xl mx-auto uppercase tracking-[0.2em] font-medium">
-                Plateforme de contenu multimédia haut de gamme avec administration sécurisée.
+              <p className="text-white/40 text-[8px] md:text-base max-w-2xl mx-auto uppercase tracking-[0.15em] font-medium px-4">
+                Contenu multimédia haut de gamme • Administration sécurisée.
               </p>
             </motion.div>
 
             {/* Filter Bar */}
-            <div className="flex justify-center mb-16">
-              <div className="glass p-1.5 rounded-full flex gap-2">
+            <div className="flex justify-center mb-6 md:mb-16">
+              <div className="glass p-1 rounded-full flex gap-1 md:gap-2">
                 {filterOptions.map((opt) => (
                   <button
                     key={opt.id}
                     onClick={() => setFilter(opt.id as any)}
-                    className={`relative px-10 py-3.5 rounded-full text-base font-bold transition-colors ${
+                    className={`relative px-3 md:px-10 py-1.5 md:py-3.5 rounded-full text-[10px] md:text-base font-bold transition-colors ${
                       filter === opt.id ? 'text-black' : 'text-white/60 hover:text-white'
                     }`}
                   >

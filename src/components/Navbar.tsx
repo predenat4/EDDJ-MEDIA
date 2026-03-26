@@ -2,21 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Key, X, LayoutDashboard, LogOut, Home, Eye, EyeOff } from 'lucide-react';
 import { ChristianCross } from './Icons';
-import { auth, googleProvider, signInWithPopup, signOut } from '../firebase';
+import { auth, googleProvider, signInWithPopup, signOut, sendSignInLinkToEmail, ActionCodeSettings } from '../firebase';
 
 interface NavbarProps {
   onAuthSuccess: () => void;
   isAuthenticated: boolean;
+  userRole: 'admin' | 'user' | null;
   onLogout: () => void;
   showAdmin: boolean;
   onToggleAdmin: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, onLogout, showAdmin, onToggleAdmin }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, userRole, onLogout, showAdmin, onToggleAdmin }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [linkSent, setLinkSent] = useState(false);
+  const [authMethod, setAuthMethod] = useState<'google' | 'email'>('google');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,7 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
     setIsLoading(true);
     setError(null);
 
@@ -48,6 +52,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
     }
   };
 
+  const handleEmailLinkLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    const actionCodeSettings: ActionCodeSettings = {
+      url: window.location.origin,
+      handleCodeInApp: true,
+    };
+
+    try {
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', email);
+      setLinkSent(true);
+    } catch (err: any) {
+      console.error("Email link error", err);
+      setError("Erreur lors de l'envoi de l'email : " + (err.message || "Inconnue"));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -60,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-6 py-4 ${
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 md:px-6 py-2 md:py-4 ${
           isScrolled ? 'bg-anthracite/80 backdrop-blur-md border-b border-white/10' : 'bg-transparent'
         }`}
       >
@@ -69,34 +97,43 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={() => showAdmin ? onToggleAdmin() : null}
-            className={`flex items-center gap-2 text-2xl font-bold tracking-tighter ${showAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+            className={`flex items-center gap-1.5 md:gap-2 text-lg md:text-2xl font-bold tracking-tighter ${showAdmin ? 'cursor-pointer' : 'cursor-default'}`}
           >
-            <div className="p-1.5 rounded-lg electric-gradient">
-              <ChristianCross size={20} className="text-black" />
+            <div className="p-1 md:p-1.5 rounded-lg electric-gradient">
+              <ChristianCross size={16} className="text-black md:hidden" />
+              <ChristianCross size={20} className="text-black hidden md:block" />
             </div>
             <span>EDJJ<span className="electric-text">MEDIA</span></span>
           </motion.button>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             {isAuthenticated ? (
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={onToggleAdmin}
-                  className={`p-2 rounded-full glass hover:bg-white/10 transition-colors ${showAdmin ? 'bg-white/10' : ''}`}
-                  title={showAdmin ? "Retour à l'accueil" : "Dashboard Admin"}
-                >
-                  {showAdmin ? (
-                    <Home size={20} className="text-electric-cyan" />
-                  ) : (
-                    <LayoutDashboard size={20} className="text-electric-cyan" />
-                  )}
-                </button>
+              <div className="flex items-center gap-2 md:gap-4">
+                {userRole === 'admin' && (
+                  <button
+                    onClick={onToggleAdmin}
+                    className={`p-1.5 md:p-2 rounded-full glass hover:bg-white/10 transition-colors ${showAdmin ? 'bg-white/10' : ''}`}
+                    title={showAdmin ? "Retour à l'accueil" : "Dashboard Admin"}
+                  >
+                    {showAdmin ? (
+                      <Home size={18} className="text-electric-cyan md:hidden" />
+                    ) : (
+                      <LayoutDashboard size={18} className="text-electric-cyan md:hidden" />
+                    )}
+                    {showAdmin ? (
+                      <Home size={20} className="text-electric-cyan hidden md:block" />
+                    ) : (
+                      <LayoutDashboard size={20} className="text-electric-cyan hidden md:block" />
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={handleLogout}
-                  className="p-2 rounded-full glass hover:bg-white/10 transition-colors"
+                  className="p-1.5 md:p-2 rounded-full glass hover:bg-white/10 transition-colors"
                   title="Logout"
                 >
-                  <LogOut size={20} className="text-red-500" />
+                  <LogOut size={18} className="text-red-500 md:hidden" />
+                  <LogOut size={20} className="text-red-500 hidden md:block" />
                 </button>
               </div>
             ) : (
@@ -104,9 +141,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsModalOpen(true)}
-                className="p-2 rounded-full glass hover:bg-white/10 transition-colors"
+                className="p-1.5 md:p-2 rounded-full glass hover:bg-white/10 transition-colors"
               >
-                <Key size={20} className="text-electric-cyan" />
+                <Key size={18} className="text-electric-cyan md:hidden" />
+                <Key size={20} className="text-electric-cyan hidden md:block" />
               </motion.button>
             )}
           </div>
@@ -144,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
               </button>
 
                 <h2 className="text-2xl font-bold mb-2">Accès Administrateur</h2>
-                <p className="text-white/60 text-sm mb-6">Connectez-vous avec votre compte Google autorisé.</p>
+                <p className="text-white/60 text-sm mb-6">Connectez-vous pour gérer le contenu.</p>
 
                 <div className="space-y-4">
                   {error && (
@@ -152,23 +190,81 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                       <p className="text-red-500 text-xs text-center font-medium">{error}</p>
                     </div>
                   )}
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleLogin}
-                    disabled={isLoading}
-                    className="w-full electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-electric-cyan/20"
-                  >
-                    {isLoading ? (
-                      <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <Key size={20} />
-                        SE CONNECTER AVEC GOOGLE
-                      </>
-                    )}
-                  </motion.button>
+
+                  {linkSent ? (
+                    <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-6 text-center">
+                      <p className="text-green-400 text-sm font-bold mb-2">Email envoyé !</p>
+                      <p className="text-white/40 text-xs">Veuillez vérifier votre boîte de réception ({email}) pour vous connecter.</p>
+                      <button 
+                        onClick={() => setLinkSent(false)}
+                        className="mt-4 text-xs text-electric-cyan hover:underline"
+                      >
+                        Renvoyer ou changer d'email
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2 mb-4">
+                        <button 
+                          onClick={() => setAuthMethod('google')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${authMethod === 'google' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}
+                        >
+                          Google
+                        </button>
+                        <button 
+                          onClick={() => setAuthMethod('email')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${authMethod === 'email' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}
+                        >
+                          Email Link
+                        </button>
+                      </div>
+
+                      {authMethod === 'google' ? (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={handleGoogleLogin}
+                          disabled={isLoading}
+                          className="w-full electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-electric-cyan/20"
+                        >
+                          {isLoading ? (
+                            <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <Key size={20} />
+                              SE CONNECTER AVEC GOOGLE
+                            </>
+                          )}
+                        </motion.button>
+                      ) : (
+                        <form onSubmit={handleEmailLinkLogin} className="space-y-4">
+                          <input
+                            type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="votre@email.com"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-electric-cyan transition-colors text-sm"
+                          />
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            disabled={isLoading || !email}
+                            className="w-full electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-electric-cyan/20"
+                          >
+                            {isLoading ? (
+                              <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Key size={20} />
+                                ENVOYER LE LIEN
+                              </>
+                            )}
+                          </motion.button>
+                        </form>
+                      )}
+                    </>
+                  )}
                 </div>
             </motion.div>
           </div>
