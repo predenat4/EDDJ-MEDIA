@@ -155,6 +155,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                   {error && <p className="text-red-500 text-xs mt-2 text-center">Clé invalide. Accès refusé.</p>}
                 </div>
 
+                <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2 text-center">Clés de test (Admin)</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {['EDJJ01', 'MEDIAX', 'ADMIN9', 'KEY777'].map(k => (
+                      <code key={k} className="text-[10px] bg-electric-cyan/10 text-electric-cyan px-2 py-1 rounded">{k}</code>
+                    ))}
+                  </div>
+                </div>
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
