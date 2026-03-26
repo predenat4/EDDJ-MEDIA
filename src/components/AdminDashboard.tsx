@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check } from 'lucide-react';
 import { ChristianCross } from './Icons';
@@ -28,6 +28,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     thumbnail: '',
     category: ''
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!newMedia.title) {
+        setNewMedia(prev => ({ ...prev, title: file.name.split('.')[0] }));
+      }
+      // In a real app, you would handle the file upload here.
+      // For this prototype, we keep the simulation in handleUpload.
+    }
+  };
 
   const handleEditStart = (item: MediaItem) => {
     setEditingId(item.id);
@@ -174,14 +191,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                     />
                   </div>
 
-                  <div className="border-2 border-dashed border-white/10 rounded-2xl p-10 flex flex-col items-center justify-center gap-4 hover:border-electric-cyan/30 transition-all cursor-pointer group bg-white/5">
-                    <div className="p-4 rounded-full bg-white/5 group-hover:bg-electric-cyan/10 transition-colors">
-                      <Upload size={32} className="text-white/20 group-hover:text-electric-cyan transition-colors" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold">Glissez-déposez vos fichiers</p>
-                      <p className="text-xs text-white/40 mt-1">MP4, MP3, JPG, PNG (Max 500MB)</p>
-                    </div>
+                  <div className="space-y-4">
+                    <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Fichier Média</label>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="hidden"
+                      accept="image/*,video/*,audio/*"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFileButtonClick}
+                      className="w-full border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 hover:border-electric-cyan/30 transition-all cursor-pointer group bg-white/5"
+                    >
+                      <div className="p-4 rounded-full bg-white/5 group-hover:bg-electric-cyan/10 transition-colors">
+                        <Upload size={32} className="text-white/20 group-hover:text-electric-cyan transition-colors" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold uppercase tracking-widest">Cliquez pour UPLOADER</p>
+                        <p className="text-[10px] text-white/40 mt-1 uppercase tracking-tighter">Sélectionnez un média depuis votre appareil</p>
+                      </div>
+                    </button>
                   </div>
 
                   {isUploading && (
