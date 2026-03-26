@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-deep-black: #000000;
+  --color-anthracite: #121212;
+  --color-electric-cyan: #00f2ff;
+  --color-electric-purple: #7000ff;
+}
+
+@layer base {
+  body {
+    @apply bg-deep-black text-white font-sans antialiased;
+  }
+}
+
+.glass {
+  @apply bg-white/5 backdrop-blur-lg border border-white/10;
+}
+
+.electric-gradient {
+  @apply bg-gradient-to-r from-electric-cyan to-electric-purple;
+}
+
+.electric-text {
+  @apply bg-gradient-to-r from-electric-cyan to-electric-purple bg-clip-text text-transparent;
+}
