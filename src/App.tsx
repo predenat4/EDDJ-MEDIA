@@ -35,6 +35,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -113,6 +114,7 @@ export default function App() {
         setUserRole(null);
         setShowAdmin(false);
       }
+      setIsAuthLoading(false);
     });
 
     // Listen for real-time media updates
@@ -205,22 +207,41 @@ export default function App() {
       />
 
       <main className="max-w-7xl mx-auto pt-20 md:pt-24 pb-20 px-4 md:px-6">
-        {showAdmin && user && userRole === 'admin' ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <AdminDashboard
-              onClose={() => setShowAdmin(false)}
-              mediaItems={media}
-              onAdd={handleAddMedia}
-              onUpdate={handleUpdateMedia}
-              onDelete={handleDeleteMedia}
-            />
-          </motion.div>
-        ) : (
-          <>
-            {/* Header Section */}
+        <AnimatePresence mode="wait">
+          {isAuthLoading ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center min-h-[60vh] gap-4"
+            >
+              <div className="w-12 h-12 border-4 border-electric-cyan/20 border-t-electric-cyan rounded-full animate-spin" />
+              <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">Initialisation...</p>
+            </motion.div>
+          ) : showAdmin && user && userRole === 'admin' ? (
+            <motion.div
+              key="admin"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <AdminDashboard
+                onClose={() => setShowAdmin(false)}
+                mediaItems={media}
+                onAdd={handleAddMedia}
+                onUpdate={handleUpdateMedia}
+                onDelete={handleDeleteMedia}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="gallery"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {/* Header Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -297,13 +318,14 @@ export default function App() {
               </AnimatePresence>
             </motion.div>
 
-            {filteredMedia.length === 0 && (
+            {filteredMedia.length === 0 && !isSyncing && (
               <div className="text-center py-20 text-white/20">
                 <p className="text-xl">Aucun média trouvé dans cette catégorie.</p>
               </div>
             )}
-          </>
+          </motion.div>
         )}
+        </AnimatePresence>
       </main>
 
       {/* Preview Modal */}

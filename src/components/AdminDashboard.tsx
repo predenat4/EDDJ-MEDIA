@@ -163,10 +163,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     }
   };
 
-  const filteredItems = mediaItems.filter(item => 
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredItems = (mediaItems || []).filter(item => 
+    (item.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (item.category?.toLowerCase() || '').includes(searchQuery.toLowerCase())
   );
+
+  if (!mediaItems) {
+    return (
+      <div className="flex items-center justify-center p-20">
+        <div className="w-8 h-8 border-2 border-electric-cyan/20 border-t-electric-cyan rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <motion.div
