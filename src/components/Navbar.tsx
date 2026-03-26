@@ -96,8 +96,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
           <motion.button
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            onClick={() => showAdmin ? onToggleAdmin() : null}
-            className={`flex items-center gap-1.5 md:gap-2 text-lg md:text-2xl font-bold tracking-tighter ${showAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+            onClick={() => userRole === 'admin' ? onToggleAdmin() : null}
+            className={`flex items-center gap-1.5 md:gap-2 text-lg md:text-2xl font-bold tracking-tighter ${userRole === 'admin' ? 'cursor-pointer' : 'cursor-default'}`}
           >
             <div className="p-1 md:p-1.5 rounded-lg electric-gradient">
               <ChristianCross size={16} className="text-black md:hidden" />
@@ -112,19 +112,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                 {userRole === 'admin' && (
                   <button
                     onClick={onToggleAdmin}
-                    className={`p-1.5 md:p-2 rounded-full glass hover:bg-white/10 transition-colors ${showAdmin ? 'bg-white/10' : ''}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full glass hover:bg-white/10 transition-all ${showAdmin ? 'bg-white/10' : ''}`}
                     title={showAdmin ? "Retour à l'accueil" : "Dashboard Admin"}
                   >
                     {showAdmin ? (
-                      <Home size={18} className="text-electric-cyan md:hidden" />
+                      <Home size={18} className="text-electric-cyan" />
                     ) : (
-                      <LayoutDashboard size={18} className="text-electric-cyan md:hidden" />
+                      <LayoutDashboard size={18} className="text-electric-cyan" />
                     )}
-                    {showAdmin ? (
-                      <Home size={20} className="text-electric-cyan hidden md:block" />
-                    ) : (
-                      <LayoutDashboard size={20} className="text-electric-cyan hidden md:block" />
-                    )}
+                    <span className="text-[10px] font-bold uppercase tracking-widest hidden md:block">
+                      {showAdmin ? "Accueil" : "Admin"}
+                    </span>
                   </button>
                 )}
                 <button

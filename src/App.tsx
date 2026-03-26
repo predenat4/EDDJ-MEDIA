@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { MediaCard } from './components/MediaCard';
@@ -22,10 +22,70 @@ import {
   signInWithEmailLink,
   setDoc,
   getDoc,
+  handleFirestoreError,
+  OperationType,
   User 
 } from './firebase';
 
 import { VideoPlayer } from './components/VideoPlayer';
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorInfo: string | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let displayMessage = "Une erreur inattendue est survenue.";
+      try {
+        const parsed = JSON.parse(this.state.errorInfo || '');
+        if (parsed.error && parsed.error.includes('insufficient permissions')) {
+          displayMessage = `Erreur de permissions Firestore (${parsed.operationType} sur ${parsed.path}). Veuillez contacter l'administrateur.`;
+        }
+      } catch (e) {
+        // Not JSON, use default or raw message
+        if (this.state.errorInfo?.includes('insufficient permissions')) {
+          displayMessage = "Vous n'avez pas les permissions nécessaires pour effectuer cette action.";
+        }
+      }
+
+      return (
+        <div className="min-h-screen bg-deep-black flex items-center justify-center p-4">
+          <div className="glass p-8 rounded-2xl max-w-md w-full text-center">
+            <h2 className="text-2xl font-bold mb-4 text-red-500">Oups !</h2>
+            <p className="text-white/60 mb-6">{displayMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="electric-gradient px-6 py-2 rounded-xl font-bold text-black"
+            >
+              Recharger la page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -40,6 +100,77 @@ export default function App() {
   const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
+    const syncUserProfile = async (currentUser: User) => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        let userSnap;
+        try {
+          userSnap = await getDoc(userRef);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
+          return 'user'; // unreachable but for TS
+        }
+
+        const adminEmails = [
+          "predenatjeanphenix@gmail.com",
+          "stepheclerveaux@gmail.com",
+          "chretiensmaptoujouretenegbibla@gmail.com"
+        ];
+        
+        // Check if invited in Firestore
+        const inviteRef = doc(db, 'admin_invites', currentUser.email || '');
+        let inviteSnap;
+        try {
+          inviteSnap = await getDoc(inviteRef);
+        } catch (err) {
+          // If we can't read invites, we might not be admin yet, but we should try to read it
+          // if the rules allow it for the user's own email.
+          console.warn("Could not check admin_invites:", err);
+          // We don't throw here to allow normal user login
+        }
+        
+        const isHardcoded = adminEmails.includes(currentUser.email || '');
+        const isInvited = inviteSnap?.exists() || false;
+        
+        let role: 'admin' | 'user' = (isHardcoded || isInvited) ? 'admin' : 'user';
+
+        if (!userSnap.exists()) {
+          try {
+            await setDoc(userRef, {
+              email: currentUser.email,
+              displayName: currentUser.displayName,
+              photoURL: currentUser.photoURL,
+              role: role,
+              createdAt: new Date().toISOString()
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
+          }
+        } else {
+          const existingData = userSnap.data();
+          // If they are hardcoded or invited but database says 'user', update it
+          if ((isHardcoded || isInvited) && existingData.role !== 'admin') {
+            try {
+              await updateDoc(userRef, { role: 'admin' });
+              role = 'admin';
+            } catch (err) {
+              console.error("Failed to update role to admin:", err);
+              role = existingData.role || 'user';
+              // We don't throw here to allow the app to load at least as a user
+            }
+          } else {
+            role = existingData.role || 'user';
+          }
+        }
+        setUserRole(role);
+        return role;
+      } catch (err) {
+        console.error("Error syncing user profile:", err);
+        setSyncError("Erreur de synchronisation du profil.");
+        return 'user';
+      }
+    };
+
     // Handle Email Link Sign-in
     if (isSignInWithEmailLink(auth, window.location.href)) {
       let email = window.localStorage.getItem('emailForSignIn');
@@ -64,57 +195,20 @@ export default function App() {
       }
     }
 
-    const syncUserProfile = async (currentUser: User) => {
-      try {
-        const userRef = doc(db, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        const adminEmails = [
-          "predenatjeanphenix@gmail.com",
-          "stepheclerveaux@gmail.com",
-          "chretiensmaptoujouretenegbibla@gmail.com"
-        ];
-        const isHardcoded = adminEmails.includes(currentUser.email || '');
-        let role: 'admin' | 'user' = isHardcoded ? 'admin' : 'user';
-
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            photoURL: currentUser.photoURL,
-            role: role,
-            createdAt: new Date().toISOString()
-          });
-        } else {
-          const existingData = userSnap.data();
-          // If they are hardcoded but database says 'user', update it
-          if (isHardcoded && existingData.role !== 'admin') {
-            try {
-              await updateDoc(userRef, { role: 'admin' });
-            } catch (err) {
-              console.error("Failed to update role to admin:", err);
-            }
-          } else {
-            role = existingData.role || 'user';
-          }
-        }
-        setUserRole(role);
-        return role;
-      } catch (err) {
-        console.error("Error syncing user profile:", err);
-        return 'user';
-      }
-    };
-
     // Listen for auth state changes
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setIsAuthLoading(false);
       if (currentUser) {
-        await syncUserProfile(currentUser);
+        try {
+          await syncUserProfile(currentUser);
+        } catch (err) {
+          console.error("Auth sync error:", err);
+        }
       } else {
         setUserRole(null);
         setShowAdmin(false);
       }
-      setIsAuthLoading(false);
     });
 
     // Listen for real-time media updates
@@ -129,22 +223,9 @@ export default function App() {
       setIsSyncing(false);
       setSyncError(null);
     }, (error) => {
-      console.error("Firestore Error (LIST): ", error);
+      handleFirestoreError(error, OperationType.LIST, 'media');
       setSyncError("Erreur de synchronisation avec la base de données.");
       setIsSyncing(false);
-      
-      // Fallback: try without orderBy in case of index issues or missing fields
-      if (error.code === 'failed-precondition' || error.message.includes('index')) {
-        const fallbackQ = query(collection(db, 'media'));
-        onSnapshot(fallbackQ, (fallbackSnapshot) => {
-          const items = fallbackSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as MediaItem[];
-          setMedia(items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
-          setSyncError(null);
-        });
-      }
     });
 
     return () => {
@@ -152,6 +233,12 @@ export default function App() {
       unsubscribeMedia();
     };
   }, []);
+
+  useEffect(() => {
+    if (userRole) {
+      console.log("User role synchronized:", userRole);
+    }
+  }, [userRole]);
 
   const handleAddMedia = async (newItem: Omit<MediaItem, 'id'>) => {
     try {
@@ -162,7 +249,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Firestore Error (CREATE): ", error);
+      handleFirestoreError(error, OperationType.CREATE, 'media');
     }
   };
 
@@ -170,7 +257,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, 'media', id));
     } catch (error) {
-      console.error("Firestore Error (DELETE): ", error);
+      handleFirestoreError(error, OperationType.DELETE, `media/${id}`);
     }
   };
 
@@ -178,7 +265,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'media', id), updates);
     } catch (error) {
-      console.error("Firestore Error (UPDATE): ", error);
+      handleFirestoreError(error, OperationType.UPDATE, `media/${id}`);
     }
   };
 
@@ -192,7 +279,8 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-deep-black selection:bg-electric-cyan selection:text-black">
+    <ErrorBoundary>
+      <div className="min-h-screen bg-deep-black selection:bg-electric-cyan selection:text-black">
       <Navbar
         isAuthenticated={!!user}
         userRole={userRole}
@@ -418,6 +506,7 @@ export default function App() {
           © 2026 EDJJ MEDIA • TOUS DROITS RÉSERVÉS
         </p>
       </footer>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }

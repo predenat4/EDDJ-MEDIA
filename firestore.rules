@@ -2,23 +2,65 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: media
+    // Fields:
+    //   - title: string (required, 1-100 chars)
+    //   - type: string (required, enum: photo, video, audio)
+    //   - url: string (required, max 2MB)
+    //   - thumbnail: string (optional)
+    //   - category: string (required, 1-50 chars)
+    //   - createdAt: string (required, ISO 8601)
+    //   - authorUid: string (required, matches creator)
+    //   - originalName: string (optional)
+    //
+    // Collection: users
+    // Fields:
+    //   - email: string (required, format: email)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - role: string (required, enum: admin, user)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: admin_invites
+    // Fields:
+    //   - invitedAt: string (required, ISO 8601)
+    //
+    // ===============================================================
+
+    // ===============================================================
     // Helper Functions
     // ===============================================================
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function isHardcodedAdmin() {
-      return request.auth.token.email in [
-        "predenatjeanphenix@gmail.com",
-        "stepheclerveaux@gmail.com",
-        "chretiensmaptoujouretenegbibla@gmail.com"
-      ] && request.auth.token.email_verified == true;
+      return isAuthenticated() && 
+             request.auth.token.email_verified == true &&
+             request.auth.token.email in [
+               "predenatjeanphenix@gmail.com",
+               "stepheclerveaux@gmail.com",
+               "chretiensmaptoujouretenegbibla@gmail.com"
+             ];
+    }
+
+    function isInvitedAdmin() {
+      return isAuthenticated() && 
+             'email' in request.auth.token &&
+             exists(/databases/$(database)/documents/admin_invites/$(request.auth.token.email));
     }
 
     function isAdmin() {
       return isAuthenticated() && (
         isHardcodedAdmin() ||
+        isInvitedAdmin() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
@@ -28,7 +70,7 @@ service cloud.firestore {
       return data.keys().hasAll(['title', 'type', 'url', 'category', 'createdAt', 'authorUid']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
              data.type in ['photo', 'video', 'audio'] &&
-             data.url is string && data.url.size() < 2000000 && // Base64 can be large
+             data.url is string && data.url.size() < 2000000 &&
              data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
              data.createdAt is string &&
              data.authorUid == request.auth.uid;
@@ -53,13 +95,22 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      // Allow users to create their own profile if it doesn't exist, but only with 'user' role
-      // Unless they are a hardcoded admin
-      allow create: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data) &&
-                      (request.resource.data.role == 'user' || isHardcodedAdmin());
-      // Only admins can update roles
-      allow update: if isAdmin() && isValidUser(request.resource.data);
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      
+      // Allow users to create their own profile
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      (request.resource.data.role == 'user' || isHardcodedAdmin() || isInvitedAdmin());
+      
+      // Users can update their own profile but NOT their role
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && 
+                        request.resource.data.role == resource.data.role) || 
+                       isAdmin();
+    }
+
+    match /admin_invites/{email} {
+      // Allow users to read their own invitation to check if they are admins
+      allow read: if isAuthenticated() && (request.auth.token.email == email || isAdmin());
+      allow write: if isAdmin();
     }
   }
 }

@@ -97,7 +97,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
         {/* Info Overlay (Floating) */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
           <h3 className="font-bold text-sm truncate">{item.title}</h3>
-          <p className="text-[10px] text-white/60 uppercase tracking-widest mt-1">{item.category}</p>
+          <div className="flex flex-col gap-0.5 mt-1">
+            <p className="text-[10px] text-white/60 uppercase tracking-widest">{item.category}</p>
+            {item.originalName && (
+              <p className="text-[8px] text-white/30 truncate italic">Ref: {item.originalName}</p>
+            )}
+          </div>
         </div>
       </div>
 

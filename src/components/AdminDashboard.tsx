@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check, Users as UsersIcon, ShieldCheck } from 'lucide-react';
 import { ChristianCross } from './Icons';
 import { MediaItem, MediaType } from '../types';
-import { db, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from '../firebase';
+import { db, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, setDoc, handleFirestoreError, OperationType } from '../firebase';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -14,14 +14,17 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaItems, onAdd, onUpdate, onDelete }) => {
-  const [activeTab, setActiveTab] = useState<'add' | 'manage' | 'users'>('manage');
+  const [activeTab, setActiveTab] = useState<'add' | 'manage' | 'users'>('add');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', category: '' });
+  const [editForm, setEditForm] = useState({ title: '', category: '', originalName: '' });
   const [users, setUsers] = useState<any[]>([]);
+  const [adminInvites, setAdminInvites] = useState<any[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
@@ -32,27 +35,109 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     type: 'photo' as MediaType,
     url: '',
     thumbnail: '',
-    category: ''
+    category: '',
+    originalName: ''
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Listen for users
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const q = query(collection(db, 'users'));
+    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
       const userList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      })).sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setUsers(userList);
       setUsersError(null);
     }, (error) => {
-      console.error("Firestore Error (USERS): ", error);
+      handleFirestoreError(error, OperationType.LIST, 'users');
       setUsersError("Erreur de connexion avec la base de données (Utilisateurs). Vérifiez vos droits d'accès.");
     });
-    return () => unsubscribe();
+
+    // Listen for admin invites
+    const unsubscribeInvites = onSnapshot(collection(db, 'admin_invites'), (snapshot) => {
+      const inviteList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        email: doc.id,
+        role: 'admin',
+        isInvite: true
+      }));
+      setAdminInvites(inviteList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'admin_invites');
+    });
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeInvites();
+    };
   }, []);
+
+  const handleInviteAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    setIsInviting(true);
+    try {
+      await setDoc(doc(db, 'admin_invites', inviteEmail.toLowerCase()), {
+        invitedAt: new Date().toISOString()
+      });
+      setInviteEmail('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `admin_invites/${inviteEmail.toLowerCase()}`);
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleRemoveInvite = async (email: string) => {
+    try {
+      await deleteDoc(doc(db, 'admin_invites', email));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `admin_invites/${email}`);
+    }
+  };
+
+  const hardcodedAdmins = [
+    "predenatjeanphenix@gmail.com",
+    "stepheclerveaux@gmail.com",
+    "chretiensmaptoujouretenegbibla@gmail.com"
+  ];
+
+  // Merge all types of admins and users
+  const allUsers = [...users];
+  
+  // Add invited admins who haven't signed in yet
+  adminInvites.forEach(invite => {
+    if (!allUsers.find(u => u.email?.toLowerCase() === invite.email.toLowerCase())) {
+      allUsers.push({
+        id: `invite-${invite.email}`,
+        email: invite.email,
+        role: 'admin',
+        isInvite: true,
+        displayName: 'Administrateur invité'
+      });
+    }
+  });
+
+  // Add hardcoded admins who haven't signed in yet
+  hardcodedAdmins.forEach(email => {
+    if (!allUsers.find(u => u.email?.toLowerCase() === email.toLowerCase())) {
+      allUsers.push({
+        id: `hardcoded-${email}`,
+        email: email,
+        role: 'admin',
+        isHardcoded: true,
+        displayName: 'Administrateur système'
+      });
+    }
+  });
+
+  const filteredUsers = allUsers.filter(u => 
+    (u.email?.toLowerCase() || '').includes(userSearchQuery.toLowerCase()) ||
+    (u.displayName?.toLowerCase() || '').includes(userSearchQuery.toLowerCase())
+  );
 
   const handleFileButtonClick = () => {
     fileInputRef.current?.click();
@@ -79,6 +164,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         setNewMedia(prev => ({ 
           ...prev, 
           title: prev.title || file.name.split('.')[0],
+          originalName: file.name,
           type,
           url: fileUrl,
           thumbnail: type === 'photo' ? fileUrl : prev.thumbnail
@@ -98,6 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         setNewMedia(prev => ({ 
           ...prev, 
           title: prev.title || file.name.split('.')[0],
+          originalName: file.name,
           type,
           url: blobUrl,
           thumbnail: prev.thumbnail || `https://picsum.photos/seed/${Date.now()}/400/300`
@@ -109,7 +196,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
   const handleEditStart = (item: MediaItem) => {
     setEditingId(item.id);
-    setEditForm({ title: item.title, category: item.category });
+    setEditForm({ 
+      title: item.title, 
+      category: item.category,
+      originalName: item.originalName || ''
+    });
   };
 
   const handleEditSave = async (id: string) => {
@@ -117,7 +208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       await updateDoc(doc(db, 'media', id), editForm);
       setEditingId(null);
     } catch (error) {
-      console.error("Firestore Error (UPDATE): ", error);
+      handleFirestoreError(error, OperationType.UPDATE, `media/${id}`);
     }
   };
 
@@ -125,7 +216,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     try {
       await updateDoc(doc(db, 'users', userId), { role: newRole });
     } catch (error) {
-      console.error("Firestore Error (ROLE UPDATE): ", error);
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
     }
   };
 
@@ -154,7 +245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
       setIsUploading(false);
       setUploadProgress(0);
-      setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '' });
+      setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
       setActiveTab('manage');
     } catch (error: any) {
       console.error("Upload error", error);
@@ -266,9 +357,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                 </h3>
                 
                 <form onSubmit={handleUpload} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Titre du média</label>
+                      <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Titre d'affichage (Page d'accueil)</label>
                       <input
                         required
                         value={newMedia.title}
@@ -291,14 +382,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Catégorie</label>
+                      <input
+                        required
+                        value={newMedia.category}
+                        onChange={e => setNewMedia({ ...newMedia, category: e.target.value })}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-electric-cyan outline-none transition-colors"
+                        placeholder="Ex: Prédication, Louange"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Nom d'origine / Lien</label>
+                      <input
+                        value={newMedia.originalName}
+                        onChange={e => setNewMedia({ ...newMedia, originalName: e.target.value })}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-electric-cyan outline-none transition-colors"
+                        placeholder="Ex: image_01.jpg ou lien source"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Catégorie</label>
+                    <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Lien de la miniature (Optionnel)</label>
                     <input
-                      required
-                      value={newMedia.category}
-                      onChange={e => setNewMedia({ ...newMedia, category: e.target.value })}
+                      value={newMedia.thumbnail}
+                      onChange={e => setNewMedia({ ...newMedia, thumbnail: e.target.value })}
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-electric-cyan outline-none transition-colors"
-                      placeholder="Ex: Prédication, Louange, Événement"
+                      placeholder="Ex: https://... (Laissez vide pour auto-générer)"
                     />
                   </div>
 
@@ -383,19 +495,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
+              {/* Add Admin Form */}
+              <div className="glass p-6 rounded-2xl border-white/10">
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Plus size={16} className="text-electric-cyan" />
+                  Ajouter un administrateur
+                </h3>
+                <form onSubmit={handleInviteAdmin} className="flex gap-4">
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="Email du nouvel administrateur..."
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-electric-cyan outline-none transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isInviting || !inviteEmail}
+                    className="px-6 electric-gradient rounded-xl font-bold text-black flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isInviting ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <Plus size={18} />}
+                    Inviter
+                  </button>
+                </form>
+              </div>
+
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
                 <input
                   type="text"
                   value={userSearchQuery}
                   onChange={e => setUserSearchQuery(e.target.value)}
-                  placeholder="Rechercher un utilisateur par email..."
+                  placeholder="Rechercher un utilisateur..."
                   className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 focus:border-electric-cyan outline-none transition-colors"
                 />
               </div>
 
               <div className="space-y-3">
-                {users.filter(u => u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())).map(u => (
+                {filteredUsers.map(u => (
                   <div key={u.id} className="glass p-4 rounded-xl flex items-center justify-between border-white/5">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-white/5 overflow-hidden border border-white/10">
@@ -408,7 +546,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                         )}
                       </div>
                       <div>
-                        <h4 className="font-bold text-sm">{u.displayName || 'Utilisateur sans nom'}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm">{u.displayName || 'Utilisateur sans nom'}</h4>
+                          {u.isHardcoded && <span className="text-[8px] px-1.5 py-0.5 rounded bg-white/10 text-white/40 uppercase font-bold">Système</span>}
+                          {u.isInvite && <span className="text-[8px] px-1.5 py-0.5 rounded bg-electric-cyan/10 text-electric-cyan uppercase font-bold">Invité</span>}
+                        </div>
                         <p className="text-[10px] text-white/40 uppercase tracking-widest">{u.email}</p>
                       </div>
                     </div>
@@ -420,13 +562,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                         }`}>
                           {u.role}
                         </span>
-                        {u.email !== "predenatjeanphenix@gmail.com" && (
+                        
+                        {!u.isHardcoded && (
                           <button
-                            onClick={() => handleRoleUpdate(u.id, u.role === 'admin' ? 'user' : 'admin')}
+                            onClick={() => {
+                              if (u.isInvite) {
+                                handleRemoveInvite(u.email);
+                              } else {
+                                handleRoleUpdate(u.id, u.role === 'admin' ? 'user' : 'admin');
+                              }
+                            }}
                             className="p-2 text-white/20 hover:text-electric-cyan hover:bg-electric-cyan/10 rounded-lg transition-all"
-                            title={u.role === 'admin' ? "Retirer les droits admin" : "Donner les droits admin"}
+                            title={u.isInvite ? "Supprimer l'invitation" : (u.role === 'admin' ? "Retirer les droits admin" : "Donner les droits admin")}
                           >
-                            {u.role === 'admin' ? <ShieldCheck size={18} className="text-electric-cyan" /> : <ShieldCheck size={18} />}
+                            {u.isInvite ? <Trash2 size={18} className="text-red-500" /> : (u.role === 'admin' ? <ShieldCheck size={18} className="text-electric-cyan" /> : <ShieldCheck size={18} />)}
                           </button>
                         )}
                       </div>
@@ -481,13 +630,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                                 onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                                 className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:border-electric-cyan outline-none transition-all"
                                 autoFocus
+                                placeholder="Titre d'affichage"
                               />
-                              <input
-                                type="text"
-                                value={editForm.category}
-                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                                className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white/60 focus:border-electric-cyan outline-none transition-all"
-                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={editForm.category}
+                                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white/60 focus:border-electric-cyan outline-none transition-all"
+                                  placeholder="Catégorie"
+                                />
+                                <input
+                                  type="text"
+                                  value={editForm.originalName}
+                                  onChange={(e) => setEditForm({ ...editForm, originalName: e.target.value })}
+                                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white/40 focus:border-electric-cyan outline-none transition-all italic"
+                                  placeholder="Nom d'origine"
+                                />
+                              </div>
                             </div>
                           ) : (
                             <>
@@ -497,6 +657,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
                                   {item.type}
                                 </span>
                                 <span className="text-[10px] text-white/40 uppercase tracking-widest">{item.category}</span>
+                                {item.originalName && (
+                                  <span className="text-[9px] text-white/20 italic ml-2 truncate max-w-[150px]">
+                                    ({item.originalName})
+                                  </span>
+                                )}
                               </div>
                             </>
                           )}

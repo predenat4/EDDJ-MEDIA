@@ -7,6 +7,7 @@ export interface MediaItem {
   url: string;
   thumbnail: string;
   category: string;
+  originalName?: string;
   createdAt?: string;
   authorUid?: string;
 }

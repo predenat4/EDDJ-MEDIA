@@ -11,15 +11,46 @@
         "thumbnail": { "type": "string", "description": "The URL of the thumbnail image." },
         "category": { "type": "string", "description": "The category of the media." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the item was created." },
-        "authorUid": { "type": "string", "description": "The UID of the admin who uploaded it." }
+        "authorUid": { "type": "string", "description": "The UID of the admin who uploaded it." },
+        "originalName": { "type": "string", "description": "The original name of the file." }
       },
       "required": ["title", "type", "url", "category", "createdAt", "authorUid"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile in the application.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "photoURL": { "type": "string", "description": "The user's photo URL." },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "The user's role." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created." }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "AdminInvite": {
+      "title": "Admin Invite",
+      "description": "A pending invitation for a user to become an admin.",
+      "type": "object",
+      "properties": {
+        "invitedAt": { "type": "string", "format": "date-time", "description": "When the invitation was sent." }
+      },
+      "required": ["invitedAt"]
     }
   },
   "firestore": {
     "/media/{mediaId}": {
       "schema": "MediaItem",
       "description": "Collection of media items."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles."
+    },
+    "/admin_invites/{email}": {
+      "schema": "AdminInvite",
+      "description": "Collection of pending admin invitations."
     }
   }
 }
