@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check } from 'lucide-react';
 import { ChristianCross } from './Icons';
 import { MediaItem, MediaType } from '../types';
+import { db, collection, addDoc, updateDoc, deleteDoc, doc } from '../firebase';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -21,6 +22,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', category: '' });
   
+  const [isReadingFile, setIsReadingFile] = useState(false);
   const [newMedia, setNewMedia] = useState({
     title: '',
     type: 'photo' as MediaType,
@@ -38,11 +40,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!newMedia.title) {
-        setNewMedia(prev => ({ ...prev, title: file.name.split('.')[0] }));
+      setIsReadingFile(true);
+      let type: MediaType = 'photo';
+      if (file.type.startsWith('video/')) type = 'video';
+      else if (file.type.startsWith('audio/')) type = 'audio';
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileUrl = reader.result as string;
+        setNewMedia(prev => ({ 
+          ...prev, 
+          title: prev.title || file.name.split('.')[0],
+          type,
+          url: fileUrl,
+          thumbnail: type === 'photo' ? fileUrl : prev.thumbnail
+        }));
+        setIsReadingFile(false);
+      };
+      
+      if (type === 'photo' || type === 'audio') {
+        reader.readAsDataURL(file);
+      } else {
+        const blobUrl = URL.createObjectURL(file);
+        setNewMedia(prev => ({ 
+          ...prev, 
+          title: prev.title || file.name.split('.')[0],
+          type,
+          url: blobUrl,
+          thumbnail: prev.thumbnail || `https://picsum.photos/seed/${Date.now()}/400/300`
+        }));
+        setIsReadingFile(false);
       }
-      // In a real app, you would handle the file upload here.
-      // For this prototype, we keep the simulation in handleUpload.
     }
   };
 
@@ -52,30 +80,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   };
 
   const handleEditSave = async (id: string) => {
-    onUpdate(id, editForm);
-    setEditingId(null);
+    try {
+      await updateDoc(doc(db, 'media', id), editForm);
+      setEditingId(null);
+    } catch (error) {
+      console.error("Firestore Error (UPDATE): ", error);
+    }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsUploading(true);
     
-    // Simulate upload progress
-    for (let i = 0; i <= 100; i += 10) {
-      setUploadProgress(i);
-      await new Promise(r => setTimeout(r, 100));
+    try {
+      // Simulate upload progress for UI feel
+      for (let i = 0; i <= 100; i += 20) {
+        setUploadProgress(i);
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      onAdd({
+        ...newMedia,
+        url: newMedia.url || `https://picsum.photos/seed/${Date.now()}/800/600`,
+        thumbnail: newMedia.thumbnail || (newMedia.type === 'photo' ? newMedia.url : `https://picsum.photos/seed/${Date.now()}/400/300`)
+      });
+
+      setIsUploading(false);
+      setUploadProgress(0);
+      setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '' });
+      setActiveTab('manage');
+    } catch (error) {
+      console.error("Upload error", error);
+      setIsUploading(false);
     }
-
-    onAdd({
-      ...newMedia,
-      url: newMedia.url || `https://picsum.photos/seed/${Date.now()}/800/600`,
-      thumbnail: newMedia.thumbnail || `https://picsum.photos/seed/${Date.now()}/400/300`
-    });
-
-    setIsUploading(false);
-    setUploadProgress(0);
-    setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '' });
-    setActiveTab('manage');
   };
 
   const filteredItems = mediaItems.filter(item => 
@@ -236,13 +273,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
                   <button
                     type="submit"
-                    disabled={isUploading}
+                    disabled={isUploading || isReadingFile || !newMedia.title || !newMedia.category}
                     className="w-full electric-gradient py-4 rounded-xl font-bold text-black hover:shadow-[0_0_20px_rgba(0,242,255,0.3)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isUploading ? (
                       <>
                         <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                        Traitement...
+                        Traitement... {uploadProgress}%
+                      </>
+                    ) : isReadingFile ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Lecture du fichier...
                       </>
                     ) : (
                       <>

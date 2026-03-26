@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "MediaItem": {
+      "title": "Media Item",
+      "description": "A media item (photo, video, or audio) uploaded by an admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the media." },
+        "type": { "type": "string", "enum": ["photo", "video", "audio"], "description": "The type of media." },
+        "url": { "type": "string", "description": "The URL of the media file (Base64 or external URL)." },
+        "thumbnail": { "type": "string", "description": "The URL of the thumbnail image." },
+        "category": { "type": "string", "description": "The category of the media." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the item was created." },
+        "authorUid": { "type": "string", "description": "The UID of the admin who uploaded it." }
+      },
+      "required": ["title", "type", "url", "category", "createdAt", "authorUid"]
+    }
+  },
+  "firestore": {
+    "/media/{mediaId}": {
+      "schema": "MediaItem",
+      "description": "Collection of media items."
+    }
+  }
+}

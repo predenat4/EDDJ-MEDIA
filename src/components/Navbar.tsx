@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Key, X, LayoutDashboard, LogOut, Home, Eye, EyeOff } from 'lucide-react';
 import { ChristianCross } from './Icons';
+import { auth, googleProvider, signInWithPopup, signOut } from '../firebase';
 
 interface NavbarProps {
-  onAuthSuccess: (token: string) => void;
+  onAuthSuccess: () => void;
   isAuthenticated: boolean;
   onLogout: () => void;
   showAdmin: boolean;
@@ -14,8 +15,6 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, onLogout, showAdmin, onToggleAdmin }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [keyInput, setKeyInput] = useState('');
-  const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,31 +26,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async () => {
     setIsLoading(true);
     setError(false);
 
     try {
-      const response = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: keyInput }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        onAuthSuccess(data.token);
-        setIsModalOpen(false);
-        setKeyInput('');
-      } else {
-        setError(true);
-      }
+      await signInWithPopup(auth, googleProvider);
+      onAuthSuccess();
+      setIsModalOpen(false);
     } catch (err) {
+      console.error("Login error", err);
       setError(true);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      onLogout();
+    } catch (err) {
+      console.error("Logout error", err);
     }
   };
 
@@ -90,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                   )}
                 </button>
                 <button
-                  onClick={onLogout}
+                  onClick={handleLogout}
                   className="p-2 rounded-full glass hover:bg-white/10 transition-colors"
                   title="Logout"
                 >
@@ -141,48 +137,29 @@ export const Navbar: React.FC<NavbarProps> = ({ onAuthSuccess, isAuthenticated, 
                 <X size={20} />
               </button>
 
-              <h2 className="text-2xl font-bold mb-2">Accès Administrateur</h2>
-              <p className="text-white/60 text-sm mb-6">Veuillez saisir votre clé d'accès unique.</p>
+                <h2 className="text-2xl font-bold mb-2">Accès Administrateur</h2>
+                <p className="text-white/60 text-sm mb-6">Connectez-vous avec votre compte Google autorisé.</p>
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="relative">
-                  <input
-                    type={showKey ? "text" : "password"}
-                    value={keyInput}
-                    onChange={(e) => setKeyInput(e.target.value)}
-                    placeholder="Clé d'accès"
-                    className={`w-full bg-white/5 border ${
-                      error ? 'border-red-500' : 'border-white/10'
-                    } rounded-lg px-4 py-3 focus:outline-none focus:border-electric-cyan transition-colors text-center tracking-[0.2em] font-mono pr-12`}
-                    maxLength={8}
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                <div className="space-y-4">
+                  {error && <p className="text-red-500 text-xs mt-2 text-center">Accès refusé ou erreur de connexion.</p>}
+                  
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleLogin}
+                    disabled={isLoading}
+                    className="w-full electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-3 disabled:opacity-50 shadow-xl shadow-electric-cyan/20"
                   >
-                    {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                  {error && <p className="text-red-500 text-xs mt-2 text-center">Clé invalide. Accès refusé.</p>}
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Key size={20} />
+                        SE CONNECTER AVEC GOOGLE
+                      </>
+                    )}
+                  </motion.button>
                 </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  disabled={isLoading}
-                  className="w-full electric-gradient py-3 rounded-lg font-bold text-black flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Key size={18} />
-                      Vérifier la clé
-                    </>
-                  )}
-                </motion.button>
-              </form>
             </motion.div>
           </div>
         )}

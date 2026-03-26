@@ -6,47 +6,82 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MediaItem, AuthState, MediaType } from './types';
 import { X, Play, Download, Image as ImageIcon, Music } from 'lucide-react';
 import { ChristianCross } from './components/Icons';
+import { 
+  db, 
+  auth, 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  onAuthStateChanged,
+  deleteDoc,
+  doc,
+  addDoc,
+  updateDoc,
+  User 
+} from './firebase';
 
 import { VideoPlayer } from './components/VideoPlayer';
 
 export default function App() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [filter, setFilter] = useState<'all' | MediaType>('all');
-  const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, token: null });
+  const [user, setUser] = useState<User | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
 
   useEffect(() => {
-    fetchMedia();
+    // Listen for auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (!currentUser) setShowAdmin(false);
+    });
+
+    // Listen for real-time media updates
+    const q = query(collection(db, 'media'), orderBy('createdAt', 'desc'));
+    const unsubscribeMedia = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as MediaItem[];
+      setMedia(items);
+    }, (error) => {
+      console.error("Firestore Error (LIST): ", error);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeMedia();
+    };
   }, []);
 
-  const fetchMedia = async () => {
-    const res = await fetch('/api/media');
-    const data = await res.json();
-    setMedia(data);
-  };
-
   const handleAddMedia = async (newItem: Omit<MediaItem, 'id'>) => {
-    const res = await fetch('/api/media', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newItem),
-    });
-    if (res.ok) fetchMedia();
+    try {
+      if (!user) return;
+      await addDoc(collection(db, 'media'), {
+        ...newItem,
+        authorUid: user.uid,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Firestore Error (CREATE): ", error);
+    }
   };
 
   const handleDeleteMedia = async (id: string) => {
-    const res = await fetch(`/api/media/${id}`, { method: 'DELETE' });
-    if (res.ok) fetchMedia();
+    try {
+      await deleteDoc(doc(db, 'media', id));
+    } catch (error) {
+      console.error("Firestore Error (DELETE): ", error);
+    }
   };
 
   const handleUpdateMedia = async (id: string, updates: Partial<MediaItem>) => {
-    const res = await fetch(`/api/media/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
-    if (res.ok) fetchMedia();
+    try {
+      await updateDoc(doc(db, 'media', id), updates);
+    } catch (error) {
+      console.error("Firestore Error (UPDATE): ", error);
+    }
   };
 
   const filteredMedia = filter === 'all' ? media : media.filter(m => m.type === filter);
@@ -61,21 +96,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-deep-black selection:bg-electric-cyan selection:text-black">
       <Navbar
-        isAuthenticated={auth.isAuthenticated}
+        isAuthenticated={!!user}
         showAdmin={showAdmin}
         onToggleAdmin={() => setShowAdmin(prev => !prev)}
-        onAuthSuccess={(token) => {
-          setAuth({ isAuthenticated: true, token });
+        onAuthSuccess={() => {
           setShowAdmin(true);
         }}
         onLogout={() => {
-          setAuth({ isAuthenticated: false, token: null });
           setShowAdmin(false);
         }}
       />
 
       <main className="max-w-7xl mx-auto pt-24 pb-20 px-6">
-        {showAdmin && auth.isAuthenticated ? (
+        {showAdmin && user ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
