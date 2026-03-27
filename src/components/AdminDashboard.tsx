@@ -19,7 +19,8 @@ import {
   storage,
   ref,
   uploadBytesResumable,
-  getDownloadURL
+  getDownloadURL,
+  auth
 } from '../firebase';
 
 interface AdminDashboardProps {
@@ -42,6 +43,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   const [adminInvites, setAdminInvites] = useState<any[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
@@ -98,12 +100,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     if (!inviteEmail) return;
     setIsInviting(true);
     try {
+      setDashboardError(null);
       await setDoc(doc(db, 'admin_invites', inviteEmail.toLowerCase()), {
         invitedAt: new Date().toISOString()
       });
       setInviteEmail('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `admin_invites/${inviteEmail.toLowerCase()}`);
+    } catch (error: any) {
+      console.error("Error inviting admin", error);
+      let msg = "Erreur lors de l'invitation.";
+      try {
+        const parsed = JSON.parse(error.message);
+        msg += ` (${parsed.error})`;
+      } catch (e) {
+        msg += ` : ${error?.message || "Inconnue"}`;
+      }
+      setDashboardError(msg);
     } finally {
       setIsInviting(false);
     }
@@ -111,9 +122,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
   const handleRemoveInvite = async (email: string) => {
     try {
+      setDashboardError(null);
       await deleteDoc(doc(db, 'admin_invites', email));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `admin_invites/${email}`);
+    } catch (error: any) {
+      console.error("Error removing invite", error);
+      let msg = "Erreur lors de la suppression de l'invitation.";
+      try {
+        const parsed = JSON.parse(error.message);
+        msg += ` (${parsed.error})`;
+      } catch (e) {
+        msg += ` : ${error?.message || "Inconnue"}`;
+      }
+      setDashboardError(msg);
     }
   };
 
@@ -203,10 +223,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         video.preload = 'metadata';
         
         video.onloadedmetadata = () => {
-          video.currentTime = 1; // Seek to 1 second
+          video.currentTime = Math.min(1, video.duration / 2);
         };
         
+        // Add a safety timeout for thumbnail generation
+        const thumbnailTimeout = setTimeout(() => {
+          if (isReadingFile) {
+            console.warn("Thumbnail generation timed out, using fallback");
+            setNewMedia(prev => ({ 
+              ...prev, 
+              title: prev.title || file.name.split('.')[0],
+              originalName: file.name,
+              type,
+              url: blobUrl,
+              thumbnail: `https://picsum.photos/seed/${Date.now()}/400/300`
+            }));
+            setIsReadingFile(false);
+          }
+        }, 5000);
+        
         video.onseeked = () => {
+          clearTimeout(thumbnailTimeout);
           try {
             const canvas = document.createElement('canvas');
             // Limit thumbnail size
@@ -297,18 +334,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
   const handleEditSave = async (id: string) => {
     try {
+      setDashboardError(null);
       await updateDoc(doc(db, 'media', id), editForm);
       setEditingId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `media/${id}`);
+    } catch (error: any) {
+      console.error("Error saving edit", error);
+      let msg = "Erreur lors de la modification.";
+      try {
+        const parsed = JSON.parse(error.message);
+        msg += ` (${parsed.error})`;
+      } catch (e) {
+        msg += ` : ${error?.message || "Inconnue"}`;
+      }
+      setDashboardError(msg);
     }
   };
 
   const handleRoleUpdate = async (userId: string, newRole: string) => {
     try {
+      setDashboardError(null);
       await updateDoc(doc(db, 'users', userId), { role: newRole });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    } catch (error: any) {
+      console.error("Error updating role", error);
+      let msg = "Erreur lors de la mise à jour du rôle.";
+      try {
+        const parsed = JSON.parse(error.message);
+        msg += ` (${parsed.error})`;
+      } catch (e) {
+        msg += ` : ${error?.message || "Inconnue"}`;
+      }
+      setDashboardError(msg);
     }
   };
 
@@ -375,19 +430,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
               setActiveTab('manage');
             } catch (addError: any) {
               console.error("Error adding to Firestore", addError);
-              setUploadError("Erreur lors de l'enregistrement en base de données : " + (addError.message || "Inconnue"));
+              let errorMessage = "Erreur lors de l'enregistrement en base de données.";
+              try {
+                const parsedError = JSON.parse(addError.message);
+                errorMessage += ` (${parsedError.error})`;
+              } catch (e) {
+                errorMessage += ` : ${addError?.message || "Inconnue"}`;
+              }
+              setUploadError(errorMessage);
               setIsUploading(false);
             }
           } catch (error: any) {
             console.error("Error in upload completion", error);
-            setUploadError("Erreur lors de la finalisation : " + (error.message || "Inconnue"));
+            setUploadError("Erreur lors de la finalisation : " + (error?.message || "Inconnue"));
             setIsUploading(false);
           }
         }
       );
     } catch (error: any) {
       console.error("Upload error", error);
-      setUploadError("Erreur lors de la publication : " + (error.message || "Inconnue"));
+      setUploadError("Erreur lors de la publication : " + (error?.message || "Inconnue"));
       setIsUploading(false);
     }
   };
@@ -422,7 +484,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
             <h2 className="text-3xl font-bold flex items-center gap-3">
               Administration
             </h2>
-            <p className="text-xs text-white/40 uppercase tracking-widest mt-2">Gestion du contenu EDJJ Media • Espace Sécurisé</p>
+            <p className="text-xs text-white/40 uppercase tracking-widest mt-2">
+              Gestion du contenu EDJJ Media • Espace Sécurisé
+              <span className="ml-4 text-electric-cyan/60">Connecté en tant que: {auth.currentUser?.email}</span>
+            </p>
           </div>
         </div>
         <button 
@@ -470,6 +535,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
           )}
         </button>
       </div>
+
+      {/* Error Display */}
+      {(dashboardError || uploadError) && (
+        <div className="mx-6 mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-500">
+          <AlertTriangle size={20} />
+          <div className="flex-1">
+            <p className="text-xs font-bold uppercase tracking-widest">{dashboardError || uploadError}</p>
+          </div>
+          <button onClick={() => { setDashboardError(null); setUploadError(null); }} className="p-1 hover:bg-white/10 rounded-lg">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {usersError && activeTab === 'users' && (
         <div className="mx-6 mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-500">

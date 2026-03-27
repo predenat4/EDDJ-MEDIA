@@ -201,11 +201,13 @@ export default function App() {
 
     // Listen for auth state changes
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      console.log("Auth state changed:", currentUser?.email);
       setUser(currentUser);
       setIsAuthLoading(false);
       if (currentUser) {
         try {
-          await syncUserProfile(currentUser);
+          const role = await syncUserProfile(currentUser);
+          console.log("User role after sync:", role);
         } catch (err) {
           console.error("Auth sync error:", err);
         }
