@@ -4,7 +4,7 @@ import { Navbar } from './components/Navbar';
 import { MediaCard } from './components/MediaCard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MediaItem, AuthState, MediaType } from './types';
-import { X, Play, Download, Image as ImageIcon, Music } from 'lucide-react';
+import { X, Play, Download, Image as ImageIcon, Music, Share2, Calendar, Clock, ArrowUpDown } from 'lucide-react';
 import { ChristianCross } from './components/Icons';
 import { 
   db, 
@@ -24,7 +24,10 @@ import {
   getDoc,
   handleFirestoreError,
   OperationType,
-  User 
+  User,
+  storage,
+  ref,
+  deleteObject
 } from './firebase';
 
 import { VideoPlayer } from './components/VideoPlayer';
@@ -90,6 +93,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 export default function App() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [filter, setFilter] = useState<'all' | MediaType>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -211,9 +215,15 @@ export default function App() {
       }
     });
 
-    // Listen for real-time media updates
+    return () => {
+      unsubscribeAuth();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Re-subscribe when sortOrder changes
     setIsSyncing(true);
-    const q = query(collection(db, 'media'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'media'), orderBy('createdAt', sortOrder));
     const unsubscribeMedia = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -228,11 +238,8 @@ export default function App() {
       setIsSyncing(false);
     });
 
-    return () => {
-      unsubscribeAuth();
-      unsubscribeMedia();
-    };
-  }, []);
+    return () => unsubscribeMedia();
+  }, [sortOrder]);
 
   useEffect(() => {
     if (userRole) {
@@ -255,6 +262,27 @@ export default function App() {
 
   const handleDeleteMedia = async (id: string) => {
     try {
+      const itemToDelete = media.find(m => m.id === id);
+      if (itemToDelete) {
+        // Delete from Storage if it's a Storage URL
+        if (itemToDelete.url.includes('firebasestorage.googleapis.com')) {
+          try {
+            const fileRef = ref(storage, itemToDelete.url);
+            await deleteObject(fileRef);
+          } catch (e) {
+            console.error("Error deleting file from storage", e);
+          }
+        }
+        // Delete thumbnail from Storage if it's a Storage URL
+        if (itemToDelete.thumbnail && itemToDelete.thumbnail.includes('firebasestorage.googleapis.com')) {
+          try {
+            const thumbRef = ref(storage, itemToDelete.thumbnail);
+            await deleteObject(thumbRef);
+          } catch (e) {
+            console.error("Error deleting thumbnail from storage", e);
+          }
+        }
+      }
       await deleteDoc(doc(db, 'media', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `media/${id}`);
@@ -363,7 +391,7 @@ export default function App() {
             </motion.div>
 
             {/* Filter Bar */}
-            <div className="flex justify-center mb-6 md:mb-16">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-8 md:mb-16">
               <div className="glass p-1 rounded-full flex gap-1 md:gap-2">
                 {filterOptions.map((opt) => (
                   <button
@@ -384,12 +412,20 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              <button
+                onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                className="glass px-4 py-2 md:py-3.5 rounded-full flex items-center gap-2 text-[10px] md:text-sm font-bold text-white/60 hover:text-white transition-colors border border-white/5"
+              >
+                <ArrowUpDown size={14} className="text-electric-cyan" />
+                <span>{sortOrder === 'desc' ? 'Plus récent' : 'Plus ancien'}</span>
+              </button>
             </div>
 
             {/* Media Grid */}
             <motion.div
               layout
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+              className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-8"
             >
               <AnimatePresence mode="popLayout">
                 {filteredMedia.map((item, index) => (
@@ -480,16 +516,42 @@ export default function App() {
                     </div>
                   </div>
 
-                  <motion.a
-                    href={previewItem.url}
-                    download
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="mt-8 w-full electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-2"
-                  >
-                    <Download size={20} />
-                    Télécharger
-                  </motion.a>
+                  <div className="flex gap-4 mt-8">
+                    <motion.a
+                      href={previewItem.url}
+                      download
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex-1 electric-gradient py-4 rounded-xl font-bold text-black flex items-center justify-center gap-2"
+                    >
+                      <Download size={20} />
+                      Télécharger
+                    </motion.a>
+
+                    <motion.button
+                      onClick={async () => {
+                        try {
+                          if (navigator.share) {
+                            await navigator.share({
+                              title: previewItem.title,
+                              text: `Découvrez ce contenu sur EDJJ Media : ${previewItem.title}`,
+                              url: previewItem.url,
+                            });
+                          } else {
+                            await navigator.clipboard.writeText(previewItem.url);
+                            alert("Lien copié dans le presse-papier !");
+                          }
+                        } catch (error) {
+                          console.error("Error sharing", error);
+                        }
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="p-4 glass rounded-xl border border-white/10 hover:bg-white/10 transition-colors"
+                    >
+                      <Share2 size={24} />
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             </motion.div>

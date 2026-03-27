@@ -3,7 +3,24 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Plus, Trash2, CheckCircle2, Search, Settings, FileText, AlertTriangle, Edit2, Check, Users as UsersIcon, ShieldCheck } from 'lucide-react';
 import { ChristianCross } from './Icons';
 import { MediaItem, MediaType } from '../types';
-import { db, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, setDoc, handleFirestoreError, OperationType } from '../firebase';
+import { 
+  db, 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  setDoc, 
+  handleFirestoreError, 
+  OperationType,
+  storage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL
+} from '../firebase';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -30,6 +47,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
   
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newMedia, setNewMedia] = useState({
     title: '',
     type: 'photo' as MediaType,
@@ -143,43 +161,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setUploadError(null);
-      // Check file size (Firestore document limit is 1MB, but we should be safer)
-      if (file.size > 10000000) {
-        setUploadError("Le fichier est trop volumineux (max 100MB pour Firestore). Veuillez utiliser un fichier plus petit.");
+      // Check file size (100MB limit as requested)
+      if (file.size > 100 * 1024 * 1024) {
+        setUploadError("Le fichier est trop volumineux (max 100MB).");
         return;
       }
 
       setIsReadingFile(true);
+      setSelectedFile(file);
+      
       let type: MediaType = 'photo';
       if (file.type.startsWith('video/')) type = 'video';
       else if (file.type.startsWith('audio/')) type = 'audio';
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const fileUrl = reader.result as string;
-        setNewMedia(prev => ({ 
-          ...prev, 
-          title: prev.title || file.name.split('.')[0],
-          originalName: file.name,
-          type,
-          url: fileUrl,
-          thumbnail: type === 'photo' ? fileUrl : prev.thumbnail
-        }));
-        setIsReadingFile(false);
-      };
-      
-      reader.onerror = () => {
-        setUploadError("Erreur lors de la lecture du fichier.");
-        setIsReadingFile(false);
-      };
-
-      if (type === 'photo' || type === 'audio') {
+      // For photos, we can still use Base64 for a quick preview, 
+      // but for videos/audio we'll use object URLs for preview
+      if (type === 'photo') {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setNewMedia(prev => ({ 
+            ...prev, 
+            title: prev.title || file.name.split('.')[0],
+            originalName: file.name,
+            type,
+            url: reader.result as string,
+            thumbnail: reader.result as string
+          }));
+          setIsReadingFile(false);
+        };
         reader.readAsDataURL(file);
+      } else if (type === 'video') {
+        const blobUrl = URL.createObjectURL(file);
+        
+        // Try to capture a thumbnail from the video
+        const video = document.createElement('video');
+        video.src = blobUrl;
+        video.preload = 'metadata';
+        
+        video.onloadedmetadata = () => {
+          video.currentTime = 1; // Seek to 1 second
+        };
+        
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const thumbnail = canvas.toDataURL('image/jpeg');
+          
+          setNewMedia(prev => ({ 
+            ...prev, 
+            title: prev.title || file.name.split('.')[0],
+            originalName: file.name,
+            type,
+            url: blobUrl,
+            thumbnail: thumbnail
+          }));
+          setIsReadingFile(false);
+        };
+
+        video.onerror = () => {
+          setNewMedia(prev => ({ 
+            ...prev, 
+            title: prev.title || file.name.split('.')[0],
+            originalName: file.name,
+            type,
+            url: blobUrl,
+            thumbnail: `https://picsum.photos/seed/${Date.now()}/400/300`
+          }));
+          setIsReadingFile(false);
+        };
       } else {
+        // Audio
         const blobUrl = URL.createObjectURL(file);
         setNewMedia(prev => ({ 
           ...prev, 
@@ -187,7 +245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
           originalName: file.name,
           type,
           url: blobUrl,
-          thumbnail: prev.thumbnail || `https://picsum.photos/seed/${Date.now()}/400/300`
+          thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=300&fit=crop' // Default music thumbnail
         }));
         setIsReadingFile(false);
       }
@@ -222,7 +280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMedia.url) {
+    if (!selectedFile) {
       setUploadError("Veuillez sélectionner un fichier.");
       return;
     }
@@ -231,22 +289,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     setUploadError(null);
     
     try {
-      // Simulate upload progress for UI feel
-      for (let i = 0; i <= 100; i += 10) {
-        setUploadProgress(i);
-        await new Promise(r => setTimeout(r, 50));
-      }
+      // 1. Upload file to Firebase Storage
+      const storageRef = ref(storage, `media/${Date.now()}_${selectedFile.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
-      await onAdd({
-        ...newMedia,
-        url: newMedia.url,
-        thumbnail: newMedia.thumbnail || (newMedia.type === 'photo' ? newMedia.url : `https://picsum.photos/seed/${Date.now()}/400/300`)
-      });
+      // 2. Monitor upload progress
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        }, 
+        (error) => {
+          console.error("Upload error", error);
+          setUploadError("Erreur lors de l'envoi au stockage : " + error.message);
+          setIsUploading(false);
+        }, 
+        async () => {
+          // 3. Get download URL
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          
+          // 4. If it's a photo, we use the downloadURL as thumbnail too
+          // If it's a video, we might have a Base64 thumbnail already in newMedia.thumbnail
+          // We should also upload the thumbnail if it's a Base64 string to avoid Firestore limits
+          let thumbnailUrl = newMedia.thumbnail;
+          if (thumbnailUrl.startsWith('data:')) {
+            const thumbBlob = await (await fetch(thumbnailUrl)).blob();
+            const thumbRef = ref(storage, `thumbnails/${Date.now()}_thumb.jpg`);
+            await uploadBytesResumable(thumbRef, thumbBlob);
+            thumbnailUrl = await getDownloadURL(thumbRef);
+          }
 
-      setIsUploading(false);
-      setUploadProgress(0);
-      setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
-      setActiveTab('manage');
+          // 5. Add to Firestore
+          await onAdd({
+            ...newMedia,
+            url: downloadURL,
+            thumbnail: thumbnailUrl || downloadURL
+          });
+
+          setIsUploading(false);
+          setUploadProgress(0);
+          setSelectedFile(null);
+          setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
+          setActiveTab('manage');
+        }
+      );
     } catch (error: any) {
       console.error("Upload error", error);
       setUploadError("Erreur lors de la publication : " + (error.message || "Inconnue"));

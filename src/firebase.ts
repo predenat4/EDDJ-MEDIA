@@ -25,12 +25,20 @@ import {
   setDoc,
   getDoc
 } from 'firebase/firestore';
+import { 
+  getStorage, 
+  ref, 
+  uploadBytesResumable, 
+  getDownloadURL,
+  deleteObject
+} from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Test connection
@@ -112,6 +120,10 @@ export {
   isSignInWithEmailLink,
   signInWithEmailLink,
   setDoc,
-  getDoc
+  getDoc,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject
 };
 export type { User, ActionCodeSettings };
