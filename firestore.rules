@@ -67,13 +67,20 @@ service cloud.firestore {
     }
 
     function isValidMedia(data) {
-      return data.keys().hasAll(['title', 'type', 'url', 'category', 'createdAt', 'authorUid']) &&
+      let requiredFields = ['title', 'type', 'url', 'category', 'createdAt', 'authorUid'];
+      let optionalFields = ['thumbnail', 'originalName'];
+      let allAllowedFields = requiredFields.concat(optionalFields);
+      
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allAllowedFields) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
              data.type in ['photo', 'video', 'audio'] &&
              data.url is string && data.url.size() < 2000000 &&
              data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
              data.createdAt is string &&
-             data.authorUid == request.auth.uid;
+             data.authorUid == request.auth.uid &&
+             (!('thumbnail' in data) || (data.thumbnail is string && data.thumbnail.size() < 2000000)) &&
+             (!('originalName' in data) || (data.originalName is string && data.originalName.size() < 200));
     }
 
     function isValidUser(data) {

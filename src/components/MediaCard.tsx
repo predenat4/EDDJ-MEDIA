@@ -55,16 +55,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="flex flex-col gap-4"
+      className="flex flex-col rounded-2xl overflow-hidden glass border border-white/10 shadow-xl group/card"
     >
       <div
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={() => onPreview(item)}
-        className="relative group aspect-[3/4] rounded-xl overflow-hidden glass cursor-pointer"
+        className="relative aspect-[3/4] overflow-hidden cursor-pointer"
       >
         {/* Media Content */}
-        <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-105">
+        <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover/card:scale-105">
           <div className="relative w-full h-full flex items-center justify-center bg-black/40">
             {/* Background Blur */}
             <img
@@ -116,57 +116,35 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
         <div className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`} />
 
         {/* Type Icon */}
-        <div className="absolute top-4 left-4 p-2 rounded-lg glass">
-          {item.type === 'photo' && <ImageIcon size={16} className="text-electric-cyan" />}
-          {item.type === 'video' && <Play size={16} className="text-electric-cyan" />}
-          {item.type === 'audio' && <Music size={16} className="text-electric-cyan" />}
+        <div className="absolute top-3 left-3 p-1.5 rounded-lg glass z-20">
+          {item.type === 'photo' && <ImageIcon size={14} className="text-electric-cyan" />}
+          {item.type === 'video' && <Play size={14} className="text-electric-cyan" />}
+          {item.type === 'audio' && <Music size={14} className="text-electric-cyan" />}
         </div>
 
-        {/* Audio Spectrum Animation */}
-        {item.type === 'audio' && isHovered && (
-          <div className="absolute inset-0 flex items-center justify-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <motion.div
-                key={i}
-                animate={{ height: [10, 30, 10] }}
-                transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
-                className="w-1 bg-electric-cyan rounded-full"
-              />
-            ))}
-          </div>
-        )}
-
         {/* Info Overlay (Floating) */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-          <h3 className="font-bold text-sm truncate">{item.title}</h3>
-          <div className="flex flex-col gap-0.5 mt-1">
-            <p className="text-[10px] text-white/60 uppercase tracking-widest">{item.category}</p>
+        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-20">
+          <h3 className="font-bold text-xs sm:text-sm truncate">{item.title}</h3>
+          <div className="flex flex-col gap-0.5 mt-0.5">
+            <p className="text-[9px] sm:text-[10px] text-white/60 uppercase tracking-widest">{item.category}</p>
             {item.originalName && (
-              <p className="text-[8px] text-white/30 truncate italic">Ref: {item.originalName}</p>
+              <p className="text-[7px] sm:text-[8px] text-white/30 truncate italic">Ref: {item.originalName}</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Action Buttons Below */}
-      <div className="flex gap-2">
+      {/* Action Buttons Integrated */}
+      <div className="flex p-1.5 gap-1.5 bg-black/20 backdrop-blur-sm border-t border-white/5">
         <motion.button
           onClick={() => onPreview(item)}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="flex-1 glass border-white/10 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-white/20 transition-all duration-300"
+          className="flex-1 glass border-white/5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 hover:bg-white/20 transition-all duration-300"
+          title={item.type === 'photo' ? 'Aperçu' : 'Lire'}
         >
-          {item.type === 'photo' ? (
-            <>
-              <Maximize2 size={16} />
-              Aperçu
-            </>
-          ) : (
-            <>
-              <Play size={16} />
-              Lire
-            </>
-          )}
+          {item.type === 'photo' ? <Maximize2 size={16} /> : <Play size={16} />}
+          <span className="hidden sm:inline">{item.type === 'photo' ? 'Aperçu' : 'Lire'}</span>
         </motion.button>
 
         <motion.a
@@ -174,19 +152,21 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
           download
           whileHover={{ scale: 1.02, opacity: 0.9 }}
           whileTap={{ scale: 0.98 }}
-          className="flex-1 electric-gradient py-2.5 rounded-xl font-bold text-sm text-black flex items-center justify-center gap-2 shadow-lg shadow-electric-cyan/20 transition-all duration-300"
+          className="flex-1 electric-gradient py-2 rounded-xl font-bold text-xs sm:text-sm text-black flex items-center justify-center gap-2 shadow-lg shadow-electric-cyan/20 transition-all duration-300"
+          title="Télécharger"
         >
           <Download size={16} />
-          Télécharger
+          <span className="hidden sm:inline">Télécharger</span>
         </motion.a>
 
         <motion.button
           onClick={handleShare}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className={`p-2.5 rounded-xl border border-white/10 flex items-center justify-center transition-all duration-300 ${isSharing ? 'bg-electric-cyan text-black' : 'glass hover:bg-white/10'}`}
+          className={`px-2.5 rounded-xl border border-white/5 flex items-center justify-center transition-all duration-300 ${isSharing ? 'bg-electric-cyan text-black' : 'glass hover:bg-white/10'}`}
+          title="Partager"
         >
-          <Share2 size={18} />
+          <Share2 size={16} />
         </motion.button>
       </div>
     </motion.div>

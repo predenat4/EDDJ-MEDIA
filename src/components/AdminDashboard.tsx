@@ -207,22 +207,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         };
         
         video.onseeked = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const thumbnail = canvas.toDataURL('image/jpeg');
-          
-          setNewMedia(prev => ({ 
-            ...prev, 
-            title: prev.title || file.name.split('.')[0],
-            originalName: file.name,
-            type,
-            url: blobUrl,
-            thumbnail: thumbnail
-          }));
-          setIsReadingFile(false);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const thumbnail = canvas.toDataURL('image/jpeg');
+              
+              setNewMedia(prev => ({ 
+                ...prev, 
+                title: prev.title || file.name.split('.')[0],
+                originalName: file.name,
+                type,
+                url: blobUrl,
+                thumbnail: thumbnail
+              }));
+            } else {
+              throw new Error("Could not get canvas context");
+            }
+          } catch (err) {
+            console.error("Thumbnail generation failed", err);
+            setNewMedia(prev => ({ 
+              ...prev, 
+              title: prev.title || file.name.split('.')[0],
+              originalName: file.name,
+              type,
+              url: blobUrl,
+              thumbnail: `https://picsum.photos/seed/${Date.now()}/400/300`
+            }));
+          } finally {
+            setIsReadingFile(false);
+          }
         };
 
         video.onerror = () => {
@@ -305,32 +322,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
           setIsUploading(false);
         }, 
         async () => {
-          // 3. Get download URL
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          
-          // 4. If it's a photo, we use the downloadURL as thumbnail too
-          // If it's a video, we might have a Base64 thumbnail already in newMedia.thumbnail
-          // We should also upload the thumbnail if it's a Base64 string to avoid Firestore limits
-          let thumbnailUrl = newMedia.thumbnail;
-          if (thumbnailUrl.startsWith('data:')) {
-            const thumbBlob = await (await fetch(thumbnailUrl)).blob();
-            const thumbRef = ref(storage, `thumbnails/${Date.now()}_thumb.jpg`);
-            await uploadBytesResumable(thumbRef, thumbBlob);
-            thumbnailUrl = await getDownloadURL(thumbRef);
+          try {
+            // 3. Get download URL
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // 4. If it's a photo, we use the downloadURL as thumbnail too
+            // If it's a video, we might have a Base64 thumbnail already in newMedia.thumbnail
+            // We should also upload the thumbnail if it's a Base64 string to avoid Firestore limits
+            let thumbnailUrl = newMedia.thumbnail;
+            if (thumbnailUrl && thumbnailUrl.startsWith('data:')) {
+              try {
+                const thumbBlob = await (await fetch(thumbnailUrl)).blob();
+                const thumbRef = ref(storage, `thumbnails/${Date.now()}_thumb.jpg`);
+                await uploadBytesResumable(thumbRef, thumbBlob);
+                thumbnailUrl = await getDownloadURL(thumbRef);
+              } catch (thumbError) {
+                console.error("Error uploading thumbnail", thumbError);
+                // Fallback to downloadURL if thumbnail upload fails
+                thumbnailUrl = downloadURL;
+              }
+            }
+
+            // 5. Add to Firestore
+            await onAdd({
+              ...newMedia,
+              url: downloadURL,
+              thumbnail: thumbnailUrl || downloadURL
+            });
+
+            setIsUploading(false);
+            setUploadProgress(0);
+            setSelectedFile(null);
+            setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
+            setActiveTab('manage');
+          } catch (error: any) {
+            console.error("Error in upload completion", error);
+            setUploadError("Erreur lors de la finalisation : " + (error.message || "Inconnue"));
+            setIsUploading(false);
           }
-
-          // 5. Add to Firestore
-          await onAdd({
-            ...newMedia,
-            url: downloadURL,
-            thumbnail: thumbnailUrl || downloadURL
-          });
-
-          setIsUploading(false);
-          setUploadProgress(0);
-          setSelectedFile(null);
-          setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
-          setActiveTab('manage');
         }
       );
     } catch (error: any) {
