@@ -4,7 +4,7 @@ import { Navbar } from './components/Navbar';
 import { MediaCard } from './components/MediaCard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MediaItem, AuthState, MediaType } from './types';
-import { X, Play, Download, Image as ImageIcon, Music, Share2, Calendar, Clock, ArrowUpDown } from 'lucide-react';
+import { X, Play, Download, Image as ImageIcon, Music, Share2, Calendar, Clock, ArrowUpDown, Settings } from 'lucide-react';
 import { ChristianCross } from './components/Icons';
 import { 
   db, 
@@ -477,6 +477,17 @@ export default function App() {
       </main>
 
       {/* Preview Modal */}
+      {/* Floating Diagnostic Button */}
+      <div className="fixed bottom-6 right-6 z-[90]">
+        <button 
+          onClick={runDiagnostic}
+          className="p-3 rounded-full glass border border-white/10 text-white/40 hover:text-electric-cyan hover:border-electric-cyan/30 transition-all shadow-2xl group"
+          title="Diagnostic Système"
+        >
+          <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500" />
+        </button>
+      </div>
+
       {/* Footer Diagnostic Button */}
       <div className="max-w-7xl mx-auto px-4 py-8 border-t border-white/5 flex flex-col items-center gap-4">
         <p className="text-white/20 text-[10px] uppercase tracking-[0.2em] font-bold">
@@ -484,7 +495,7 @@ export default function App() {
         </p>
         <button 
           onClick={runDiagnostic}
-          className="text-[10px] text-white/10 hover:text-electric-cyan transition-colors uppercase tracking-widest font-bold"
+          className="px-4 py-2 rounded-full border border-white/10 text-[10px] text-white/40 hover:text-electric-cyan hover:border-electric-cyan/30 transition-all uppercase tracking-widest font-bold bg-white/5"
         >
           Diagnostic Système
         </button>
