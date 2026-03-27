@@ -148,8 +148,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
     if (file) {
       setUploadError(null);
       // Check file size (Firestore document limit is 1MB, but we should be safer)
-      if (file.size > 800000) {
-        setUploadError("Le fichier est trop volumineux (max 800KB pour Firestore). Veuillez utiliser un fichier plus petit.");
+      if (file.size > 10000000) {
+        setUploadError("Le fichier est trop volumineux (max 100MB pour Firestore). Veuillez utiliser un fichier plus petit.");
         return;
       }
 
