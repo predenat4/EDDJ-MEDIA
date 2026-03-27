@@ -233,7 +233,7 @@ export default function App() {
       setIsSyncing(false);
       setSyncError(null);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'media');
+      console.error("Media sync error", error);
       setSyncError("Erreur de synchronisation avec la base de données.");
       setIsSyncing(false);
     });

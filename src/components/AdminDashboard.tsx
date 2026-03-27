@@ -70,7 +70,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       setUsers(userList);
       setUsersError(null);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
+      console.error("Users sync error", error);
       setUsersError("Erreur de connexion avec la base de données (Utilisateurs). Vérifiez vos droits d'accès.");
     });
 
@@ -84,7 +84,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       }));
       setAdminInvites(inviteList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'admin_invites');
+      console.error("Invites sync error", error);
     });
 
     return () => {
@@ -209,12 +209,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
         video.onseeked = () => {
           try {
             const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Limit thumbnail size
+            const maxDim = 640;
+            let width = video.videoWidth;
+            let height = video.videoHeight;
+            
+            if (width > height) {
+              if (width > maxDim) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              }
+            } else {
+              if (height > maxDim) {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
             if (ctx) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const thumbnail = canvas.toDataURL('image/jpeg');
+              ctx.drawImage(video, 0, 0, width, height);
+              const thumbnail = canvas.toDataURL('image/jpeg', 0.7); // Use 0.7 quality to further reduce size
               
               setNewMedia(prev => ({ 
                 ...prev, 
@@ -344,17 +361,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
             }
 
             // 5. Add to Firestore
-            await onAdd({
-              ...newMedia,
-              url: downloadURL,
-              thumbnail: thumbnailUrl || downloadURL
-            });
+            try {
+              await onAdd({
+                ...newMedia,
+                url: downloadURL,
+                thumbnail: thumbnailUrl || downloadURL
+              });
 
-            setIsUploading(false);
-            setUploadProgress(0);
-            setSelectedFile(null);
-            setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
-            setActiveTab('manage');
+              setIsUploading(false);
+              setUploadProgress(0);
+              setSelectedFile(null);
+              setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
+              setActiveTab('manage');
+            } catch (addError: any) {
+              console.error("Error adding to Firestore", addError);
+              setUploadError("Erreur lors de l'enregistrement en base de données : " + (addError.message || "Inconnue"));
+              setIsUploading(false);
+            }
           } catch (error: any) {
             console.error("Error in upload completion", error);
             setUploadError("Erreur lors de la finalisation : " + (error.message || "Inconnue"));

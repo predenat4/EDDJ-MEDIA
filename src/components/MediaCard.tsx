@@ -68,7 +68,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
           <div className="relative w-full h-full flex items-center justify-center bg-black/40">
             {/* Background Blur */}
             <img
-              src={item.thumbnail}
+              src={item.thumbnail || 'https://picsum.photos/seed/placeholder/400/300'}
               alt=""
               className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-20 scale-150"
               referrerPolicy="no-referrer"
@@ -77,7 +77,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
             {item.type === 'video' ? (
               <>
                 <img
-                  src={item.thumbnail}
+                  src={item.thumbnail || 'https://picsum.photos/seed/video/400/300'}
                   alt={item.title}
                   className={`relative z-10 w-full h-full object-contain transition-opacity duration-300 ${isHovered ? 'opacity-0' : 'opacity-100'}`}
                   referrerPolicy="no-referrer"
@@ -94,7 +94,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
             ) : item.type === 'audio' ? (
               <div className="relative z-10 w-full h-full flex items-center justify-center">
                 <img
-                  src={item.thumbnail}
+                  src={item.thumbnail || 'https://picsum.photos/seed/audio/400/300'}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover opacity-20"
                   referrerPolicy="no-referrer"
@@ -103,7 +103,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
               </div>
             ) : (
               <img
-                src={item.thumbnail}
+                src={item.thumbnail || 'https://picsum.photos/seed/photo/400/300'}
                 alt={item.title}
                 className="relative z-10 w-full h-full object-contain"
                 referrerPolicy="no-referrer"
@@ -144,7 +144,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
           title={item.type === 'photo' ? 'Aperçu' : 'Lire'}
         >
           {item.type === 'photo' ? <Maximize2 size={16} /> : <Play size={16} />}
-          <span className="hidden sm:inline">{item.type === 'photo' ? 'Aperçu' : 'Lire'}</span>
         </motion.button>
 
         <motion.a
@@ -156,7 +155,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, onPreview }) => {
           title="Télécharger"
         >
           <Download size={16} />
-          <span className="hidden sm:inline">Télécharger</span>
         </motion.a>
 
         <motion.button
