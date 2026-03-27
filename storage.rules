@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email in [
+          "predenatjeanphenix@gmail.com",
+          "stepheclerveaux@gmail.com",
+          "chretiensmaptoujouretenegbibla@gmail.com"
+        ] ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) && 
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    match /media/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /thumbnails/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

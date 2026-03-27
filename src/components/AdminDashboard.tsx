@@ -374,10 +374,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       return;
     }
 
+    if (!newMedia.title.trim() || !newMedia.category.trim()) {
+      setUploadError("Veuillez remplir tous les champs obligatoires (Titre et Catégorie).");
+      return;
+    }
+
     setIsUploading(true);
     setUploadError(null);
     
     try {
+      console.log("Starting upload for file:", selectedFile.name, "type:", selectedFile.type);
       // 1. Upload file to Firebase Storage
       const storageRef = ref(storage, `media/${Date.now()}_${selectedFile.name}`);
       const uploadTask = uploadBytesResumable(storageRef, selectedFile);
@@ -386,17 +392,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
       uploadTask.on('state_changed', 
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log("Upload progress:", progress.toFixed(2) + "%");
           setUploadProgress(progress);
         }, 
         (error) => {
-          console.error("Upload error", error);
+          console.error("Storage upload error:", error);
           setUploadError("Erreur lors de l'envoi au stockage : " + error.message);
           setIsUploading(false);
         }, 
         async () => {
           try {
+            console.log("Upload to storage successful, getting download URL...");
             // 3. Get download URL
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log("Download URL obtained:", downloadURL);
             
             // 4. If it's a photo, we use the downloadURL as thumbnail too
             // If it's a video, we might have a Base64 thumbnail already in newMedia.thumbnail
@@ -404,10 +413,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
             let thumbnailUrl = newMedia.thumbnail;
             if (thumbnailUrl && thumbnailUrl.startsWith('data:')) {
               try {
+                console.log("Uploading thumbnail...");
                 const thumbBlob = await (await fetch(thumbnailUrl)).blob();
                 const thumbRef = ref(storage, `thumbnails/${Date.now()}_thumb.jpg`);
                 await uploadBytesResumable(thumbRef, thumbBlob);
                 thumbnailUrl = await getDownloadURL(thumbRef);
+                console.log("Thumbnail uploaded:", thumbnailUrl);
               } catch (thumbError) {
                 console.error("Error uploading thumbnail", thumbError);
                 // Fallback to downloadURL if thumbnail upload fails
@@ -417,11 +428,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
 
             // 5. Add to Firestore
             try {
+              console.log("Adding document to Firestore...");
               await onAdd({
                 ...newMedia,
                 url: downloadURL,
                 thumbnail: thumbnailUrl || downloadURL
               });
+              console.log("Document added successfully!");
 
               setIsUploading(false);
               setUploadProgress(0);
@@ -429,7 +442,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
               setNewMedia({ title: '', type: 'photo', url: '', thumbnail: '', category: '', originalName: '' });
               setActiveTab('manage');
             } catch (addError: any) {
-              console.error("Error adding to Firestore", addError);
+              console.error("Firestore add error:", addError);
               let errorMessage = "Erreur lors de l'enregistrement en base de données.";
               try {
                 const parsedError = JSON.parse(addError.message);
@@ -441,14 +454,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, mediaIt
               setIsUploading(false);
             }
           } catch (error: any) {
-            console.error("Error in upload completion", error);
+            console.error("Finalization error:", error);
             setUploadError("Erreur lors de la finalisation : " + (error?.message || "Inconnue"));
             setIsUploading(false);
           }
         }
       );
     } catch (error: any) {
-      console.error("Upload error", error);
+      console.error("General upload error:", error);
       setUploadError("Erreur lors de la publication : " + (error?.message || "Inconnue"));
       setIsUploading(false);
     }

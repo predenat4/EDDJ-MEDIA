@@ -27,7 +27,9 @@ import {
   User,
   storage,
   ref,
-  deleteObject
+  deleteObject,
+  checkFirebaseStatus,
+  firebaseConfig
 } from './firebase';
 
 import { VideoPlayer } from './components/VideoPlayer';
@@ -98,6 +100,23 @@ export default function App() {
   const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
+  const [diagnosticData, setDiagnosticData] = useState<any>(null);
+
+  const runDiagnostic = async () => {
+    setShowDiagnostic(true);
+    const status = await checkFirebaseStatus();
+    setDiagnosticData({
+      ...status,
+      projectId: firebaseConfig.projectId,
+      authDomain: firebaseConfig.authDomain
+    });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    // Could add a toast here
+  };
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(true);
@@ -208,6 +227,9 @@ export default function App() {
         try {
           const role = await syncUserProfile(currentUser);
           console.log("User role after sync:", role);
+          if (role === 'admin') {
+            setShowAdmin(true);
+          }
         } catch (err) {
           console.error("Auth sync error:", err);
         }
@@ -455,6 +477,140 @@ export default function App() {
       </main>
 
       {/* Preview Modal */}
+      {/* Footer Diagnostic Button */}
+      <div className="max-w-7xl mx-auto px-4 py-8 border-t border-white/5 flex flex-col items-center gap-4">
+        <p className="text-white/20 text-[10px] uppercase tracking-[0.2em] font-bold">
+          © 2026 EDJJ MEDIA • TOUS DROITS RÉSERVÉS
+        </p>
+        <button 
+          onClick={runDiagnostic}
+          className="text-[10px] text-white/10 hover:text-electric-cyan transition-colors uppercase tracking-widest font-bold"
+        >
+          Diagnostic Système
+        </button>
+      </div>
+
+      {/* Diagnostic Modal */}
+      <AnimatePresence>
+        {showDiagnostic && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDiagnostic(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg glass p-8 rounded-3xl overflow-hidden border border-white/10"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 electric-gradient" />
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold">Diagnostic Système</h2>
+                  <p className="text-white/40 text-xs mt-1">Vérification de la connexion Firebase</p>
+                </div>
+                <button 
+                  onClick={() => setShowDiagnostic(false)}
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {!diagnosticData ? (
+                <div className="flex flex-col items-center py-12 gap-4">
+                  <div className="w-8 h-8 border-2 border-electric-cyan/30 border-t-electric-cyan rounded-full animate-spin" />
+                  <p className="text-white/40 text-sm">Analyse en cours...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Firestore</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${diagnosticData.firestore ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                        <span className="font-bold text-sm">{diagnosticData.firestore ? 'Connecté' : 'Erreur'}</span>
+                      </div>
+                    </div>
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Auth</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${diagnosticData.auth ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                        <span className="font-bold text-sm">{diagnosticData.auth ? 'Prêt' : 'Erreur'}</span>
+                      </div>
+                    </div>
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Stockage</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${diagnosticData.storage ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                        <span className="font-bold text-sm">{diagnosticData.storage ? 'Prêt' : 'Erreur'}</span>
+                      </div>
+                    </div>
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Config</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${diagnosticData.config ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                        <span className="font-bold text-sm">{diagnosticData.config ? 'Valide' : 'Manquante'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Project ID</p>
+                      <p className="font-bold text-xs truncate">{diagnosticData.projectId}</p>
+                    </div>
+                    <div className="glass p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Auth Domain</p>
+                      <p className="font-bold text-xs truncate">{diagnosticData.authDomain}</p>
+                    </div>
+                  </div>
+
+                  <div className="glass p-4 rounded-2xl border border-white/5">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest">Domaine Actuel</p>
+                      <button 
+                        onClick={() => copyToClipboard(diagnosticData.domain)}
+                        className="text-[9px] text-electric-cyan hover:underline font-bold"
+                      >
+                        COPIER
+                      </button>
+                    </div>
+                    <p className="font-mono text-xs text-electric-cyan break-all">{diagnosticData.domain}</p>
+                  </div>
+
+                  {diagnosticData.error && (
+                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl">
+                      <p className="text-[10px] text-red-500 uppercase tracking-widest mb-2 font-bold">Détails de l'erreur</p>
+                      <p className="text-xs text-red-400 font-mono leading-relaxed">{diagnosticData.error}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <p className="text-xs text-white/60 leading-relaxed">
+                      Si vous voyez des erreurs de connexion, assurez-vous que le domaine ci-dessus est ajouté dans la section 
+                      <span className="text-electric-cyan font-bold"> "Authorized Domains" </span> 
+                      de votre console Firebase Authentication.
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={() => setShowDiagnostic(false)}
+                    className="w-full electric-gradient py-3 rounded-xl font-bold text-black text-sm"
+                  >
+                    FERMER
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {previewItem && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10">

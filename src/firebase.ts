@@ -42,16 +42,34 @@ export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Test connection
-async function testConnection() {
+export async function checkFirebaseStatus() {
+  const status = {
+    firestore: false,
+    auth: false,
+    storage: false,
+    domain: window.location.hostname,
+    config: !!firebaseConfig.apiKey,
+    error: null as string | null
+  };
+
   try {
+    // Test Firestore
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    status.firestore = true;
+  } catch (error: any) {
+    status.error = error.message;
+    if (error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration. ");
     }
   }
+
+  status.auth = !!auth;
+  status.storage = !!storage;
+
+  return status;
 }
-testConnection();
+
+checkFirebaseStatus();
 
 export enum OperationType {
   CREATE = 'create',
@@ -124,6 +142,7 @@ export {
   ref,
   uploadBytesResumable,
   getDownloadURL,
-  deleteObject
+  deleteObject,
+  firebaseConfig
 };
 export type { User, ActionCodeSettings };
