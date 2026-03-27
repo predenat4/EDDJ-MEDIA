@@ -9,7 +9,7 @@ service cloud.firestore {
     // Fields:
     //   - title: string (required, 1-100 chars)
     //   - type: string (required, enum: photo, video, audio)
-    //   - url: string (required, max 2MB)
+    //   - url: string (required, max 100MB)
     //   - thumbnail: string (optional)
     //   - category: string (required, 1-50 chars)
     //   - createdAt: string (required, ISO 8601)
@@ -70,7 +70,7 @@ service cloud.firestore {
       return data.keys().hasAll(['title', 'type', 'url', 'category', 'createdAt', 'authorUid']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
              data.type in ['photo', 'video', 'audio'] &&
-             data.url is string && data.url.size() < 2000000 &&
+             data.url is string && data.url.size() < 100000000 &&
              data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
              data.createdAt is string &&
              data.authorUid == request.auth.uid;
